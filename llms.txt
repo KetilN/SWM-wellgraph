@@ -1,0 +1,32 @@
+# wellgraph
+
+> Read-only MCP server over a knowledge graph of Norwegian continental shelf wellbores:
+> SODIR backbone (wellbores, formation tops, hole sections) plus drilling events
+> (lost circulation, kicks, stuck pipe, tight hole, instability) extracted from public
+> end-of-well reports, each with a page-level citation.
+
+To use it, connect an MCP client to the server and call `describe_graph` first. The
+server is self-describing. Hosted endpoint: planned. Local run:
+`PYTHONPATH=src uv run python -m wellgraph.mcp_server` (stdio) or add `--http --port 7860`
+and connect to `http://localhost:7860/mcp`.
+
+## Docs
+
+- [README](README.md): what it is, how to connect, the six tools
+- [AGENTS.md](AGENTS.md): how an agent should query the graph or work on the code
+- [Plan](docs/PLAN.md): goals, design decisions, data findings, open questions
+- [Sample reports](samples/README.md): four report JSONs and their structure
+
+## Tools
+
+- describe_graph: coverage, units, schema, example questions
+- find_wells: wellbores by block, field, operator, formation, type, distance
+- get_well_summary: one wellbore's header, formation tops, hole sections, events, reports
+- query_events: events across wells by type, formation, hole size, distance, mud weight
+- offset_well_analysis: aggregated events and lessons around a wellbore or location
+- get_evidence: verbatim quote, report and page for one event
+
+## Data
+
+- Reports: Zenodo record 24320092, DOI 10.5281/zenodo.24320092, CC BY 4.0, ConocoPhillips / Diskos
+- Backbone: SODIR FactPages, NLOD 2.0
