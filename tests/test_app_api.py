@@ -47,6 +47,21 @@ def test_events_filters_pass_through(client):
     assert [e["event_id"] for e in exact["results"]] == ["ev-1"]
 
 
+def test_matrix_drilldown_uses_the_same_group_as_the_matrix_before_limiting(client):
+    matrix = client.get("/api/matrix").json()
+    for group in matrix["rows"]:
+        for event_type in matrix["event_types"]:
+            response = client.get("/api/events", params={
+                "matrix_group": group["group"], "event_type": event_type, "limit": 1,
+            })
+            assert response.status_code == 200
+            result = response.json()
+            assert result["total"] == group["counts"].get(event_type, 0)
+            for event in result["results"]:
+                units = event["formations"]
+                assert (units[0] if units else "(no formation)") == group["group"]
+
+
 def test_offset_and_evidence(client):
     o = client.get("/api/offset", params={"near": "99/1-1", "radius_km": 35}).json()
     assert o["offset_wells"] == 2 and o["summary"]

@@ -362,6 +362,14 @@ def test_core_samples_and_cross_plot_points(core_store):
     assert core["count"] == 12 and core["samples"][0]["depth_md"] == 2450.0
     plot = core_store.poro_perm("Tor Fm")
     assert plot["pairs"] == 36 and len(plot["points"]) == 36 and plot["fit"]["slope"] == 0.15
+    assert plot["wellbores"] == 3 and plot["porosity_p50"] is not None and plot["kh_p50_md"] is not None
+    assert plot["lithologies"] == ["sandstone", "siltstone"]
+    assert {row["kh_method"] for row in plot["points"]} == {"klinkenberg", "air"}
+    assert {row["name"]: row["has_core"] for row in core_store.report_wells()} == {
+        "99/1-1": True, "99/1-2 A": True, "99/1-3": True,
+    }
     assert core_store.poro_perm("Tor Fm", "siltstone")["pairs"] == 9
-    assert core_store.poro_perm("Hod Fm") == {"formation": "HOD FM", "lithology": "all", "pairs": 0,
-                                              "points": [], "fit": None}
+    assert core_store.poro_perm("Hod Fm") == {
+        "formation": "HOD FM", "lithology": "all", "pairs": 0, "wellbores": 0,
+        "porosity_p50": None, "kh_p50_md": None, "lithologies": [], "points": [], "fit": None,
+    }

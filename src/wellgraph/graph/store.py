@@ -27,6 +27,7 @@ from .schema import (
 )
 
 MAX_LIMIT = 200
+MATRIX_GROUP_SQL = "coalesce(e.formations[1], '(no formation)')"
 SHARED_KINDS = {"GeologicalFormation", "Organisation", "Field"}
 MAX_PAGE_TEXT_CHARS = 8000
 DEFAULT_LIMIT = 50
@@ -281,6 +282,8 @@ class GraphStore:
             """
             select w.name, w.wellbore_id, w.wellbore_type, w.operator, w.field, w.lat, w.lon,
                    w.total_depth_md, count(distinct d.document_id) as documents,
+                   exists (select 1 from core_sample s where s.wellbore_id = w.wellbore_id)
+                       as has_core,
                    (select count(*) from event e where e.wellbore_id = w.wellbore_id) as events
             from wb w join document d using (wellbore_id)
             group by all order by w.name
@@ -310,15 +313,15 @@ class GraphStore:
     def event_matrix(self) -> dict[str, Any]:
         """Events across all wells, counted by formation group and event type."""
         rows = self._rows(
-            """
-            select coalesce(e.formations[1], '(no formation)') as grp, e.event_type,
+            f"""
+            select {MATRIX_GROUP_SQL} as grp, e.event_type,
                    count(*) as n, count(distinct e.wellbore_id) as wells
             from event e group by 1, 2
             """
         )
         wells = {r["grp"]: r["n"] for r in self._rows(
-            "select coalesce(formations[1], '(no formation)') as grp, "
-            "count(distinct wellbore_id) as n from event group by 1")}
+            f"select {MATRIX_GROUP_SQL} as grp, "
+            "count(distinct wellbore_id) as n from event e group by 1")}
         out: dict[str, dict[str, Any]] = {}
         for r in rows:
             entry = out.setdefault(r["grp"], {"group": r["grp"], "counts": {}, "total": 0,
@@ -437,22 +440,38 @@ class GraphStore:
         """Paired porosity / permeability samples of one formation, with the fit if there is one."""
         name = normalise_formation(formation)
         lith = (lithology or "all").strip().lower()
-        where, params = ["upper(formation) = ?", "porosity_pct > 0", "kh_md > 0"], [name]
+        formation_scope = "upper(formation) = ? and porosity_pct > 0 and kh_md > 0"
+        where, params = [formation_scope], [name]
         if lith != "all":
             where.append("lithology = ?")
             params.append(lith)
         clause = " and ".join(where)
-        total = self._scalar(f"select count(*) from core_sample where {clause}", params)
+        stats = self._rows(
+            f"""
+            select count(*) as pairs, count(distinct wellbore_id) as wellbores,
+                   median(porosity_pct) as porosity_p50, median(kh_md) as kh_p50_md
+            from core_sample where {clause}
+            """,
+            params,
+        )[0]
+        lithologies = self._rows(
+            f"select distinct lithology from core_sample where {formation_scope} "
+            "and lithology is not null order by lithology",
+            [name],
+        )
         points = self._rows(
             f"select s.wellbore_id, w.name as wellbore, s.depth_md, s.porosity_pct, s.kh_md, "
-            f"s.lithology from core_sample s join wb w using (wellbore_id) where {clause} "
+            f"s.kh_method, s.lithology from core_sample s join wb w using (wellbore_id) where {clause} "
             f"using sample reservoir({int(max_points)} rows) repeatable (7)",
             params,
         )
         fit = self._rows("select * from poro_perm_fit where upper(formation) = ? and lithology = ?",
                          [name, lith])
-        return {"formation": name, "lithology": lith, "pairs": total, "points": points,
-                "fit": fit[0] if fit else None}
+        return {
+            "formation": name, "lithology": lith, **stats,
+            "lithologies": [row["lithology"] for row in lithologies],
+            "points": points, "fit": fit[0] if fit else None,
+        }
 
     def table_rows(self, table: str) -> int | None:
         """Row count of a graph table, including ones the tools do not read; None if absent."""
@@ -757,6 +776,8 @@ class GraphStore:
         mud_weight_kind: str | None = None,
         exact_depth_only: bool = False,
         limit: int | None = None,
+        *,
+        matrix_group: str | None = None,
     ) -> dict[str, Any]:
         limit = _clamp(limit)
         origin = self._origin(near_wellbore, lat, lon)
@@ -765,6 +786,9 @@ class GraphStore:
             include_reference, min_mud_weight_sg, max_mud_weight_sg, mud_weight_kind,
             exact_depth_only,
         )
+        if matrix_group is not None:
+            clause += f" and {MATRIX_GROUP_SQL} = ?"
+            params.append(matrix_group)
         base = f"from event e join wb w using (wellbore_id) where {clause}"
         total = self._scalar(f"select count(*) {base}", params)
         rows = self._rows(

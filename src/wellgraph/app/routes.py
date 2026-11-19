@@ -118,6 +118,7 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
             max_mud_weight_sg=_float(request, "max_mud_weight_sg"),
             mud_weight_kind=_text(request, "mud_weight_kind"),
             exact_depth_only=_flag(request, "exact_depth_only"), limit=_limit(request),
+            matrix_group=_text(request, "matrix_group"),
         )
 
     def offset(request: Request):
