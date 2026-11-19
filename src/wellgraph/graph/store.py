@@ -18,6 +18,7 @@ from .schema import (
     DEPTH_BASIS_DOCS,
     DEPTH_REFS,
     EVENT_TYPES,
+    EXTRA_TABLES,
     MUD_WEIGHT_KINDS,
     MUD_WEIGHT_SOURCE_DOCS,
     SOURCE_DOI,
@@ -122,6 +123,14 @@ class GraphStore:
         else:
             self._con.execute("create table mud_check (wellbore_id BIGINT, md DOUBLE, "
                               "mud_weight_sg DOUBLE)")
+        for extra in ("core_sample", "poro_perm_fit"):
+            path = self.directory / f"{extra}.parquet"
+            if path.is_file():
+                escaped = str(path).replace("'", "''")
+                self._con.execute(f"create view {extra} as select * from read_parquet('{escaped}')")
+            else:
+                cols = ", ".join(f"{c} {t}" for c, t in EXTRA_TABLES[extra].items())
+                self._con.execute(f"create table {extra} ({cols})")
         daily = self.directory / "daily_report.parquet"
         if daily.is_file():
             escaped = str(daily).replace("'", "''")
@@ -321,6 +330,92 @@ class GraphStore:
             "rows": sorted(out.values(), key=lambda e: -e["total"]),
             "wells_with_events": self._scalar("select count(distinct wellbore_id) from event"),
         }
+
+    def core_samples(self, wellbore: str) -> dict[str, Any]:
+        """Core plug measurements of one wellbore, by depth."""
+        wb = self.resolve_wellbore(wellbore)
+        rows = self._rows(
+            "select sample_id, depth_md, porosity_pct, kh_md, kh_method, kv_md, grain_density_gcc, "
+            "water_saturation_pct, lithology, lithology_detail, grain_size, sorting, cement, "
+            "formation, group_name from core_sample where wellbore_id = ? order by depth_md",
+            [wb["wellbore_id"]],
+        )
+        return {"wellbore": wb["name"], "count": len(rows), "samples": rows}
+
+    def reservoir_quality(
+        self,
+        formation: str | None = None,
+        wellbore: str | None = None,
+        lithology: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Porosity and permeability from core, summarised per formation and rock type."""
+        limit = _clamp(limit)
+        where, params = ["s.formation is not null"], []
+        if formation:
+            where.append("upper(s.formation) like ?")
+            params.append(normalise_formation(formation) + "%")
+        if wellbore:
+            where.append("s.wellbore_id = ?")
+            params.append(self.resolve_wellbore(wellbore)["wellbore_id"])
+        if lithology:
+            where.append("s.lithology = ?")
+            params.append(lithology.strip().lower())
+        clause = " and ".join(where)
+        rows = self._rows(
+            f"""
+            select s.formation, any_value(s.group_name) as group_name,
+                   {"s.lithology" if lithology else "'all'"} as lithology,
+                   count(*) as samples, count(distinct s.wellbore_id) as wellbores,
+                   count(*) filter (where s.porosity_pct is not null and s.kh_md is not null) as paired,
+                   round(quantile_cont(s.porosity_pct, 0.1), 1) as porosity_p10,
+                   round(quantile_cont(s.porosity_pct, 0.5), 1) as porosity_p50,
+                   round(quantile_cont(s.porosity_pct, 0.9), 1) as porosity_p90,
+                   round(quantile_cont(s.kh_md, 0.5), 3) as kh_p50_md,
+                   round(quantile_cont(s.kv_md / nullif(s.kh_md, 0), 0.5), 3) as kv_over_kh_p50,
+                   round(min(s.depth_md)) as shallowest_md, round(max(s.depth_md)) as deepest_md
+            from core_sample s where {clause}
+            group by 1, 3 order by samples desc limit {limit}
+            """,
+            params,
+        )
+        fits = {(f["formation"], f["lithology"]): f for f in self._rows("select * from poro_perm_fit")}
+        for r in rows:
+            fit = fits.get((r["formation"], r["lithology"]))
+            r["poro_perm_fit"] = None if fit is None else {
+                "equation": "log10(kh in mD) = intercept + slope * porosity in %",
+                "intercept": round(fit["intercept"], 3), "slope": round(fit["slope"], 4),
+                "r2": round(fit["r2"], 2), "residual_sd_log10": round(fit["residual_sd"], 2),
+                "samples": fit["samples"], "wellbores": fit["wellbores"],
+            }
+        loaded = self._scalar("select count(*) from core_sample")
+        return {
+            "count": len(rows), "results": rows,
+            "note": None if loaded else "Core data has not been loaded into this graph.",
+            "attribution": "Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0 (RealPore).",
+        }
+
+    def poro_perm(self, formation: str, lithology: str | None = None,
+                  max_points: int = 2000) -> dict[str, Any]:
+        """Paired porosity / permeability samples of one formation, with the fit if there is one."""
+        name = normalise_formation(formation)
+        lith = (lithology or "all").strip().lower()
+        where, params = ["upper(formation) = ?", "porosity_pct > 0", "kh_md > 0"], [name]
+        if lith != "all":
+            where.append("lithology = ?")
+            params.append(lith)
+        clause = " and ".join(where)
+        total = self._scalar(f"select count(*) from core_sample where {clause}", params)
+        points = self._rows(
+            f"select s.wellbore_id, w.name as wellbore, s.depth_md, s.porosity_pct, s.kh_md, "
+            f"s.lithology from core_sample s join wb w using (wellbore_id) where {clause} "
+            f"using sample reservoir({int(max_points)} rows) repeatable (7)",
+            params,
+        )
+        fit = self._rows("select * from poro_perm_fit where upper(formation) = ? and lithology = ?",
+                         [name, lith])
+        return {"formation": name, "lithology": lith, "pairs": total, "points": points,
+                "fit": fit[0] if fit else None}
 
     def table_rows(self, table: str) -> int | None:
         """Row count of a graph table, including ones the tools do not read; None if absent."""

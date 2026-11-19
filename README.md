@@ -89,6 +89,7 @@ JSON endpoints under `/api/`.
 | `query_events` | Events across wells by type, formation, hole size, distance, mud weight. |
 | `offset_well_analysis` | Aggregated events and lessons around a wellbore or planned location. |
 | `get_evidence` | The verbatim quote, report and page behind one event. |
+| `reservoir_quality` | Porosity and permeability from core per formation and rock type, with fitted relationships. |
 
 Depths are metres measured depth, mud weight is specific gravity, hole sizes are inches,
 distances are km.
@@ -128,7 +129,7 @@ src/wellgraph/
   extract/      page routing, event schema, model client
   resolve/      wellbore names to NPD ids, depth to hole section and formation
   graph/        graph build and read-only store
-  mcp_server/   the six tools
+  mcp_server/   the MCP tools
   app/          small web page and JSON API on the same server
 samples/        four report JSONs to try the pipeline on
 ontology.yaml   what exists: entity and relationship types, OSDU kinds
@@ -143,6 +144,9 @@ docs/           plan and design notes
   DOI [10.5281/zenodo.24320092](https://doi.org/10.5281/zenodo.24320092), CC BY 4.0.
   Attribution: ConocoPhillips / Diskos.
 - Backbone: SODIR FactPages, Norwegian Licence for Open Government Data (NLOD) 2.0.
+- Core data (porosity, permeability, rock type): RealPore, Zenodo record 4723018,
+  DOI [10.5281/zenodo.4723018](https://doi.org/10.5281/zenodo.4723018).
+  Data are © GeoProvider https://geoprovider.no/ and licensed CC-BY 4.0.
 - Entity names follow the [OSDU](https://osduforum.org/) data definitions where one
   exists.
 

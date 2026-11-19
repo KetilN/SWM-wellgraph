@@ -14,7 +14,7 @@ def anyio_backend():
 
 TOOLS = {
     "describe_graph", "find_wells", "get_well_summary", "query_events",
-    "offset_well_analysis", "get_evidence",
+    "offset_well_analysis", "get_evidence", "reservoir_quality",
 }
 
 
@@ -28,7 +28,7 @@ async def call(server, tool, **args):
         return (await client.call_tool(tool, args)).data
 
 
-async def test_lists_exactly_the_six_tools_with_descriptions(server):
+async def test_lists_exactly_the_expected_tools_with_descriptions(server):
     async with Client(server) as client:
         tools = await client.list_tools()
     assert {t.name for t in tools} == TOOLS
@@ -82,3 +82,9 @@ async def test_bad_input_becomes_a_helpful_tool_error(server):
 async def test_limit_is_capped(server):
     out = await call(server, "find_wells", block="99", limit=100000)
     assert out["count"] <= 200
+
+
+async def test_reservoir_quality_reports_no_core_data_cleanly(server):
+    out = await call(server, "reservoir_quality", formation="Tor Formation")
+    assert out["results"] == [] and "not been loaded" in out["note"]
+    assert "geoprovider.no" in out["attribution"]

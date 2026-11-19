@@ -250,3 +250,56 @@ def test_mud_weight_source_is_exposed_and_explained(store):
     assert list(store.describe()["mud_weight_sources"]) == ["report", "sodir_mud_table"]
     losses = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)["summary"][0]
     assert "mud_weights_from_report" in losses and "mud_weights_from_sodir" in losses
+
+
+# --- core data -----------------------------------------------------------------------
+
+@pytest.fixture
+def core_store(kg_dir):
+    import duckdb
+
+    from wellgraph.graph.schema import EXTRA_TABLES
+    con = duckdb.connect()
+    cols = ", ".join(f"{c} {t}" for c, t in EXTRA_TABLES["core_sample"].items())
+    con.execute(f"create table core_sample ({cols})")
+    rows = []
+    for well in (1, 2, 3):
+        for i in range(12):
+            phi = 8.0 + 2.0 * i
+            rows.append((f"s{well}-{i}", well, 2450.0 + i, phi, 10 ** (-2.0 + 0.15 * phi), 10 ** (-2.3 + 0.15 * phi),
+                         "sandstone" if i % 4 else "siltstone", "TOR FM", "SHETLAND GP"))
+    con.executemany("insert into core_sample (sample_id, wellbore_id, depth_md, porosity_pct, kh_md, kv_md, "
+                    "lithology, formation, group_name) values (?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    con.execute(f"copy core_sample to '{kg_dir}/core_sample.parquet' (format parquet)")
+    cols = ", ".join(f"{c} {t}" for c, t in EXTRA_TABLES["poro_perm_fit"].items())
+    con.execute(f"create table poro_perm_fit ({cols})")
+    con.execute("insert into poro_perm_fit (formation, lithology, samples, wellbores, intercept, slope, r2, residual_sd) "
+                "values ('TOR FM', 'all', 36, 3, -2.0, 0.15, 1.0, 0.0)")
+    con.execute(f"copy poro_perm_fit to '{kg_dir}/poro_perm_fit.parquet' (format parquet)")
+    con.close()
+    return GraphStore(kg_dir)
+
+
+def test_reservoir_quality_summarises_by_formation_with_the_fit(core_store):
+    out = core_store.reservoir_quality(formation="Tor Formation")
+    (row,) = out["results"]
+    assert (row["formation"], row["lithology"], row["samples"], row["wellbores"]) == ("TOR FM", "all", 36, 3)
+    assert row["porosity_p50"] == 19.0 and row["kv_over_kh_p50"] == pytest.approx(0.501, abs=0.01)
+    assert row["poro_perm_fit"]["slope"] == 0.15 and row["poro_perm_fit"]["samples"] == 36
+    assert "geoprovider.no" in out["attribution"]
+
+
+def test_reservoir_quality_filters_by_wellbore_and_lithology(core_store):
+    one = core_store.reservoir_quality(wellbore="99/1-1", lithology="Sandstone")["results"][0]
+    assert one["samples"] == 9 and one["wellbores"] == 1 and one["lithology"] == "sandstone"
+    assert one["poro_perm_fit"] is None  # no fit stored for that rock type
+
+
+def test_core_samples_and_cross_plot_points(core_store):
+    core = core_store.core_samples("99_1-2_A")
+    assert core["count"] == 12 and core["samples"][0]["depth_md"] == 2450.0
+    plot = core_store.poro_perm("Tor Fm")
+    assert plot["pairs"] == 36 and len(plot["points"]) == 36 and plot["fit"]["slope"] == 0.15
+    assert core_store.poro_perm("Tor Fm", "siltstone")["pairs"] == 9
+    assert core_store.poro_perm("Hod Fm") == {"formation": "HOD FM", "lithology": "all", "pairs": 0,
+                                              "points": [], "fit": None}

@@ -155,6 +155,23 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
     def matrix(request: Request):
         return store.event_matrix()
 
+    def core(request: Request):
+        name = _text(request, "name")
+        if not name:
+            raise ValueError("Give a wellbore name: /api/core?name=25/7-2")
+        return store.core_samples(name)
+
+    def reservoir(request: Request):
+        return store.reservoir_quality(formation=_text(request, "formation"),
+                                       wellbore=_text(request, "wellbore"),
+                                       lithology=_text(request, "lithology"), limit=_limit(request))
+
+    def poroperm(request: Request):
+        formation = _text(request, "formation")
+        if not formation:
+            raise ValueError("Give a formation: /api/poroperm?formation=HUGIN FM")
+        return store.poro_perm(formation, _text(request, "lithology"))
+
     def evidence(request: Request):
         event_id = _text(request, "id")
         if not event_id:
@@ -165,6 +182,7 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/describe": describe, "/api/report_wells": report_wells, "/api/wells": wells,
         "/api/well": well, "/api/events": events, "/api/offset": offset,
         "/api/evidence": evidence, "/api/graph": graph, "/api/ontology": ontology,
-        "/api/daily": daily, "/api/matrix": matrix,
+        "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
+        "/api/reservoir": reservoir, "/api/poroperm": poroperm,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

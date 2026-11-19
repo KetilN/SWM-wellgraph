@@ -29,10 +29,12 @@ How to use it:
 3. Use query_events for cross-well questions (event type + formation + hole size +
    distance + mud weight). Use offset_well_analysis for an aggregated view around a
    wellbore or a planned location.
-4. Use get_well_summary for one wellbore's formations, hole sections and events.
+4. Use reservoir_quality for porosity and permeability from core by formation and rock
+   type, including fitted porosity-permeability relationships.
+5. Use get_well_summary for one wellbore's formations, hole sections and events.
    Every event has a depth_basis: 'stated' depths are exact; 'context_point' and
    'context_interval' depths come from the surrounding text and are approximate; say so.
-5. Before stating an event as fact, call get_evidence with its event_id and cite the
+6. Before stating an event as fact, call get_evidence with its event_id and cite the
    report title and page. Quote the text span; do not paraphrase numbers.
 
 Conventions: depths are metres measured depth, mud weight is specific gravity (sg), hole
@@ -235,5 +237,28 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         of the report inside the Zenodo archive, extraction confidence, and the DOI to
         cite. Set include_page_text to read the whole source page for context."""
         return guarded(store.evidence, event_id, include_page_text)
+
+    @mcp.tool(annotations=READ_ONLY)
+    def reservoir_quality(
+        formation: Formation = None,
+        wellbore: Annotated[
+            str | None, Field(description="Only core samples from this wellbore.")
+        ] = None,
+        lithology: Annotated[
+            str | None,
+            Field(description="Cleaned rock type, e.g. sandstone, siltstone, limestone, chalk."),
+        ] = None,
+        limit: Limit = None,
+    ) -> dict[str, Any]:
+        """Porosity and permeability measured on core plugs, summarised per formation:
+        number of samples and wellbores, porosity percentiles (%), median horizontal
+        permeability (mD), median kv/kh, depth range, and where enough data exists a
+        fitted relationship log10(kh in mD) = intercept + slope * porosity in %, with
+        its R2 and scatter. Filter by formation, wellbore and rock type. Formation comes
+        from the sample depth joined against SODIR tops, so samples from wells without
+        tops are not counted. Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0;
+        include that acknowledgement when you report these numbers."""
+        return guarded(store.reservoir_quality, formation=formation, wellbore=wellbore,
+                       lithology=lithology, limit=limit)
 
     return mcp

@@ -118,6 +118,29 @@ entities:
       the table has it, and the operations text. Only table layouts are parsed; daily logs
       written as plain text are not.
 
+  CoreSample:
+    ring: core
+    status: populated
+    osdu_kind: work-product-component--RockSampleAnalysis
+    table: core_sample
+    key: sample_id
+    source: "RealPore core data, Zenodo record 4723018 (© GeoProvider https://geoprovider.no/, CC BY 4.0)"
+    description: >
+      One core plug measurement at a measured depth: porosity, horizontal and vertical
+      permeability with the method used, grain density, saturations, and the rock type
+      with grain size, sorting and cement. Formation and group are attached by depth.
+
+  PoroPermRelationship:
+    ring: core
+    status: populated
+    osdu_kind: local
+    table: poro_perm_fit
+    source: fitted from core samples
+    description: >
+      Fitted relationship log10(horizontal permeability) = intercept + slope x porosity
+      for one formation and rock type, with sample count, wellbore count and scatter.
+      A measured input to the planned PetrophysicalModel.
+
   # ------------------------------------------------------------------------- observed
   # Present in the end-of-well reports, not extracted yet.
 
@@ -453,6 +476,15 @@ relationships:
   PAGE_OF: {from: Page, to: Document, ring: core, stored_as: page.document_id}
   OCCURRED_IN: {from: DrillingEvent, to: Wellbore, ring: core, stored_as: event.wellbore_id}
   REPORTS_ON: {from: DailyOperationsReport, to: Wellbore, ring: core, stored_as: daily_report.wellbore_id}
+  CORED_FROM: {from: CoreSample, to: Wellbore, ring: core, stored_as: core_sample.wellbore_id}
+  SAMPLED_IN:
+    from: CoreSample
+    to: GeologicalFormation
+    ring: core
+    stored_as: core_sample.formation
+    derived: depth join against formation_top (sample depths are measured depth)
+  FITTED_FOR: {from: PoroPermRelationship, to: GeologicalFormation, ring: core, stored_as: poro_perm_fit.formation}
+  FITTED_FROM: {from: PoroPermRelationship, to: CoreSample, ring: core, stored_as: poro_perm_fit.samples}
   IN_SECTION:
     from: DrillingEvent
     to: HoleSection
@@ -518,5 +550,6 @@ relationships:
   DELIMITED_BY_FAULT: {from: Region, to: Fault, ring: planned}
   DELIMITED_BY_BOUNDARY: {from: Region, to: Boundary, ring: planned}
   HAS_MODEL: {from: Region, to: PetrophysicalModel, ring: planned}
+  CALIBRATED_BY: {from: PetrophysicalModel, to: PoroPermRelationship, ring: planned, note: link between the two rings}
   DISCRETISES: {from: Grid3D, to: Layer, ring: planned}
   INTERSECTS: {from: Wellbore, to: Region, ring: planned, note: link between the two rings}

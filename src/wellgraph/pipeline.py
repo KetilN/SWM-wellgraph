@@ -8,6 +8,9 @@ Steps:
   3. events         route pages, ask the model, validate, depth-join, write events
   4. depth_pass     find a depth context for events whose page gave none
   5. daily_reports  parse daily drilling report tables (no model)
+  6. core           porosity, permeability and rock type from the RealPore Excel file, when
+                    it is present (--core-xlsx); --core-all loads every well, not only
+                    those with a report
 
 Model replies are cached under --cache, so a rerun only pays for pages it has not seen.
 `--offline MODEL` rebuilds everything from the cache with no model calls. The model
@@ -29,6 +32,7 @@ from wellgraph.extract.daily import build_daily_reports
 from wellgraph.extract.depth_pass import resolve_depths
 from wellgraph.extract.run import LLMClient, OfflineClient, OpenAICompatibleClient, extract_events
 from wellgraph.graph.build import build_documents
+from wellgraph.onboard.realpore import DEFAULT_XLSX, build_core_samples, build_poro_perm_fits
 from wellgraph.onboard.sodir import build_backbone, download_tables
 
 
@@ -42,6 +46,8 @@ def run_pipeline(
     max_pages_per_report: int | None = None,
     wellbores: list[str] | None = None,
     workers: int = 4,
+    core_xlsx: str | Path | None = None,
+    core_all_wellbores: bool = False,
 ) -> dict[str, Any]:
     kg_dir, cache_dir, raw_dir = Path(kg_dir), Path(cache_dir), Path(raw_dir)
     kg_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +71,11 @@ def run_pipeline(
     )
     stats["depth_pass"] = resolve_depths(kg_dir, client, cache_dir / "depth", workers)
     stats["daily_reports"] = build_daily_reports(kg_dir)
+    if core_xlsx is not None and Path(core_xlsx).is_file():
+        stats["core"] = {
+            "samples": build_core_samples(core_xlsx, kg_dir, all_wellbores=core_all_wellbores),
+            "fits": build_poro_perm_fits(kg_dir),
+        }
     return stats
 
 
@@ -81,6 +92,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-pages", type=int, default=None, help="Cap of pages per report.")
     parser.add_argument("--wellbore", action="append", help="Extract only this wellbore (repeatable).")
     parser.add_argument("--workers", type=int, default=4, help="Parallel model calls.")
+    parser.add_argument("--core-xlsx", default=str(DEFAULT_XLSX),
+                        help="RealPore Excel file; the core step is skipped if it is absent.")
+    parser.add_argument("--core-all", action="store_true",
+                        help="Load core data for every well, not only wells with a report.")
     parser.add_argument("--offline", metavar="MODEL",
                         help="Rebuild from cached replies of MODEL; no model calls.")
     args = parser.parse_args(argv)
@@ -89,7 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     client = OfflineClient(args.offline) if args.offline else OpenAICompatibleClient.from_env()
     stats = run_pipeline(args.reports, args.kg, client, args.cache, args.raw,
-                         args.download_backbone, args.max_pages, args.wellbore, args.workers)
+                         args.download_backbone, args.max_pages, args.wellbore, args.workers,
+                         args.core_xlsx, args.core_all)
     print(json.dumps(stats, indent=2, default=str))
     return 0
 

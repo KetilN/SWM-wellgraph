@@ -157,6 +157,51 @@ extra_tables:
       mud_weight_sg: {type: DOUBLE, unit: sg, description: Mud weight converted to specific gravity}
       operations: {type: VARCHAR, description: Operations text of the row}
 
+  core_sample:
+    entity: CoreSample
+    source: "RealPore core data, Zenodo record 4723018 (© GeoProvider https://geoprovider.no/, CC BY 4.0)"
+    key: [sample_id]
+    columns:
+      sample_id: {type: VARCHAR, description: "Stable id: rp2- followed by the row number in the RealPore v2.0 sheet"}
+      wellbore_id: {type: BIGINT, description: NPD wellbore id (the NPDID column of the source)}
+      depth_md: {type: DOUBLE, unit: m, description: Sample depth, measured depth}
+      porosity_pct: {type: DOUBLE, unit: "%", description: "Porosity; values outside 0-60 are dropped"}
+      porosity_method: {type: VARCHAR, description: "Which source column the porosity came from: best_available, helium, plug_horizontal, plug_vertical, fluid_summation, sum"}
+      kh_md: {type: DOUBLE, unit: mD, description: "Horizontal permeability in millidarcy; non-positive values are dropped"}
+      kh_method: {type: VARCHAR, description: "klinkenberg, air, nitrogen, gas or unspecified; the first available in that order"}
+      kv_md: {type: DOUBLE, unit: mD, description: Vertical permeability in millidarcy}
+      kv_method: {type: VARCHAR, description: "klinkenberg, air, nitrogen, gas or unspecified"}
+      grain_density_gcc: {type: DOUBLE, unit: g/cm3, description: "Grain density; values outside 1.5-4.0 are dropped"}
+      water_saturation_pct: {type: DOUBLE, unit: "%", description: Pore saturation, water}
+      oil_saturation_pct: {type: DOUBLE, unit: "%", description: Pore saturation, oil}
+      lithology: {type: VARCHAR, description: "Cleaned rock type, 12 classes (sandstone, siltstone, limestone, claystone, chalk ...)"}
+      lithology_detail: {type: VARCHAR, description: "Detailed rock type, about 70 classes (sandstone calcareous, sandstone silty ...)"}
+      grain_size: {type: VARCHAR, description: Grain size as transcribed}
+      sorting: {type: VARCHAR, description: Sorting as transcribed}
+      cement: {type: VARCHAR, description: Cementation or consolidation as transcribed}
+      description: {type: VARCHAR, description: Original core plug description}
+      formation: {type: VARCHAR, description: "SODIR formation-level unit containing the depth; from a depth join against formation_top"}
+      group_name: {type: VARCHAR, description: SODIR group containing the depth}
+      source_file: {type: VARCHAR, description: Source file name recorded in RealPore}
+
+  poro_perm_fit:
+    entity: PetrophysicalModel
+    source: fitted from core_sample
+    key: [formation, lithology]
+    columns:
+      formation: {type: VARCHAR, description: SODIR formation}
+      lithology: {type: VARCHAR, description: "Cleaned rock type, or all"}
+      samples: {type: INTEGER, description: Paired porosity and horizontal permeability samples used}
+      wellbores: {type: INTEGER, description: Wellbores those samples come from}
+      intercept: {type: DOUBLE, description: "a in log10(kh in mD) = a + b * porosity in %"}
+      slope: {type: DOUBLE, description: "b in log10(kh in mD) = a + b * porosity in %"}
+      r2: {type: DOUBLE, description: Coefficient of determination of the fit}
+      residual_sd: {type: DOUBLE, description: Standard deviation of the residuals in log10 units}
+      porosity_p10: {type: DOUBLE, unit: "%", description: 10th percentile of porosity in the samples}
+      porosity_p50: {type: DOUBLE, unit: "%", description: Median porosity}
+      porosity_p90: {type: DOUBLE, unit: "%", description: 90th percentile of porosity}
+      kh_p50: {type: DOUBLE, unit: mD, description: Median horizontal permeability}
+
 enums:
 
   event_types:
@@ -198,3 +243,4 @@ source:
   attribution: >-
     Reports: ConocoPhillips / Diskos, Zenodo record 24320092, CC BY 4.0.
     Backbone: SODIR FactPages (NLOD 2.0).
+    Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0 (RealPore, Zenodo record 4723018).
