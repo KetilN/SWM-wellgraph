@@ -17,10 +17,13 @@ _TYPE_GUIDE = {
     "over shakers.",
     "kick": "influx of formation fluid: pit gain, well flowing on a flow check, well shut in "
     "and killed. Not kick-off points, kick drills, or planned shut-ins during a well test.",
-    "stuck_pipe": "drill string, casing or logging tool stuck: jarring, back-off, "
-    "differential sticking. Not stick-slip vibration.",
-    "tight_hole": "tight hole or tight spots, overpull or drag on trips, reaming needed "
-    "because of hole condition. Routine reaming with no stated problem is not an event.",
+    "stuck_pipe": "the drill string, casing or a wireline logging tool stuck in the hole: "
+    "jarring, back-off, differential sticking. Not stick-slip vibration, not a jammed core "
+    "barrel, and not well-test (DST) tools or BOP, riser or surface equipment.",
+    "tight_hole": "the page says the hole was tight, names a tight spot, or says the string "
+    "or a logging tool could not pass or had to be worked or reamed past a point because of "
+    "hole condition. Routine reaming, and overpull or drag figures noted on a trip with no "
+    "stated problem, are not events.",
     "wellbore_instability": "cavings, sloughing shale, hole collapse, fill on bottom.",
     "pack_off": "the hole packing off around the string (pressure spike, lost circulation "
     "path). Not the wellhead pack-off seal or a pack-off tool.",
@@ -30,7 +33,8 @@ _TYPE_GUIDE = {
     "sidetrack": "an unplanned sidetrack forced by a hole problem. A planned sidetrack or "
     "a geological sidetrack is not an event.",
     "other": "another real downhole drilling problem that cost time (for example shallow "
-    "gas at surface) and fits none of the above.",
+    "gas, bit balling) and fits none of the above. Not equipment failures (motor, MWD, "
+    "pumps, top drive, BOP), not coring or logging tool faults, not waiting on weather.",
 }
 assert list(_TYPE_GUIDE) == EVENT_TYPES, "prompt type guide is out of step with EVENT_TYPES"
 
@@ -67,7 +71,17 @@ SYSTEM_PROMPT = (
     "page, return it once. Separate occurrences at different depths are separate events.\n"
     "8. remedy is what the crew did about it; lesson is a conclusion or recommendation the "
     "report itself states. Use null when the page gives none.\n"
-    "9. If the page has no such event, return an empty list: {\"events\": []}. Most pages "
+    "9. Depth for an event comes from the same sentence or the same table row (a daily "
+    "report row usually has a depth column: use it). For losses while running or cementing "
+    "casing, use the casing shoe depth if the page states it. Do not take a depth from "
+    "elsewhere on the page.\n"
+    "10. A table that only lists hours or costs per category (for example a time breakdown "
+    "with a row 'FISH 3.0') does not describe an event: skip it.\n"
+    "11. Severity: extract hole problems a drilling engineer would note when planning a "
+    "nearby well. Leave out routine observations.\n"
+    "12. Reply with the JSON object only: no markdown fences, no commentary, every field "
+    "present (null where unknown), confidence as a number.\n"
+    "13. If the page has no such event, return an empty list: {\"events\": []}. Most pages "
     "have none.\n"
 )
 
