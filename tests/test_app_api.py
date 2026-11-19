@@ -67,3 +67,19 @@ def test_mcp_endpoint_still_works_next_to_the_app(client):
     r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
                     headers={"accept": "application/json, text/event-stream"})
     assert r.status_code in (200, 400, 406)  # reachable: the MCP layer answers, not a 404
+
+
+def test_static_files_are_served_and_nothing_outside_the_folder(client):
+    r = client.get("/static/geo/quadrants.geojson")
+    assert r.status_code == 200 and r.json()["type"] == "FeatureCollection"
+    assert len(r.json()["features"]) > 100
+    assert client.get("/static/vendor/leaflet.js").status_code == 200
+    assert client.get("/static/../routes.py").status_code == 404
+    assert client.get("/static/%2e%2e/routes.py").status_code == 404
+    assert client.get("/static/geo/missing.geojson").status_code == 404
+
+
+def test_base_map_files_are_small_enough_to_ship(client):
+    total = sum(len(client.get(f"/static/geo/{n}.geojson").content)
+                for n in ("land", "quadrants", "blocks", "fields"))
+    assert total < 1_000_000

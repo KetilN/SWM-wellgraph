@@ -16,7 +16,10 @@ from starlette.responses import HTMLResponse, Response
 
 from wellgraph.graph.store import GraphStore, NotFound
 
-INDEX = Path(__file__).parent / "static" / "index.html"
+STATIC = Path(__file__).parent / "static"
+INDEX = STATIC / "index.html"
+CONTENT_TYPES = {".js": "text/javascript", ".css": "text/css", ".geojson": "application/geo+json",
+                 ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml"}
 TRUE = {"1", "true", "yes", "on"}
 
 
@@ -62,6 +65,15 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def index(request: Request) -> Response:
         return HTMLResponse(INDEX.read_text(encoding="utf-8"))
+
+    @mcp.custom_route("/static/{path:path}", methods=["GET"], include_in_schema=False)
+    async def static(request: Request) -> Response:
+        target = (STATIC / request.path_params["path"]).resolve()
+        if STATIC.resolve() not in target.parents or not target.is_file() \
+                or target.suffix not in CONTENT_TYPES:
+            return _json({"error": "not found"}, 404)
+        return Response(target.read_bytes(), media_type=CONTENT_TYPES[target.suffix],
+                        headers={"cache-control": "public, max-age=3600"})
 
     def describe(request: Request):
         return store.describe()

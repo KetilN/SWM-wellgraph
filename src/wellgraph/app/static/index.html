@@ -4,14 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wellgraph</title>
+<link rel="stylesheet" href="/static/vendor/leaflet.css">
 <style>
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --ink: #18202b; --muted: #5d6877; --line: #dde2e8;
     --accent: #0b6e99; --soft: #eef2f6; --mark: #ffe58a; --mark-ink: #18202b;
+    --sea: #dbe9f1; --land: #ece8dc; --grid: #8fa3b3;
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #12161c; --panel: #1b2129; --ink: #e7ecf2; --muted: #9aa6b4; --line: #2c3541;
-            --accent: #5bb8de; --soft: #232b35; --mark: #6b5a12; --mark-ink: #fff6cf; }
+            --accent: #5bb8de; --soft: #232b35; --mark: #6b5a12; --mark-ink: #fff6cf;
+            --sea: #16222c; --land: #2b2f2c; --grid: #56697a; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
@@ -57,6 +60,19 @@
   mark { background: var(--mark); color: var(--mark-ink); padding: 0 1px; border-radius: 2px; }
   .muted { color: var(--muted); } .small { font-size: 12px; }
   .scroll-x { overflow-x: auto; }
+  #map { height: 440px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  .leaflet-container { font: inherit; }
+  .qlabel { color: var(--grid); font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; pointer-events: none; }
+  .wlabel { color: var(--ink); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none;
+            text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel), 0 0 3px var(--panel); }
+  .leaflet-tooltip { background: var(--panel); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+  .leaflet-tooltip:before { display: none; }
+  .leaflet-control-attribution { background: color-mix(in srgb, var(--panel) 80%, transparent) !important; color: var(--muted); font-size: 10px; }
+  .leaflet-control-attribution a { color: var(--muted); }
+  .leaflet-bar a { background: var(--panel); color: var(--ink); border-color: var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 9px; border-radius: 2px; display: inline-block; }
   a { color: var(--accent); }
 </style>
 </head>
@@ -71,7 +87,14 @@
 <main>
   <section>
     <h2>Offset wells</h2>
-    <svg id="map" viewBox="0 0 400 400" role="img" aria-label="Map of offset wells"></svg>
+    <div id="map" role="img" aria-label="Map of the Norwegian continental shelf with offset wells"></div>
+    <p class="small muted legend">
+      <span><i class="sw" style="background:#4f9d5d"></i>oil field</span>
+      <span><i class="sw" style="background:#c9584c"></i>gas field</span>
+      <span><i class="sw" style="background:#d49a3a"></i>oil and gas</span>
+      <span><i class="dot" style="background:var(--accent)"></i>well with report</span>
+      <span><i class="dot" style="background:var(--muted);opacity:.6"></i>other well</span>
+    </p>
     <p class="small muted" id="maplegend"></p>
     <h2 style="margin-top:14px">What happened nearby</h2>
     <div class="scroll-x"><table id="offset"></table></div>
@@ -90,6 +113,7 @@
     <div class="evidence" id="evidence"><p class="muted small">Select an event to see the report text it comes from.</p></div>
   </section>
 </main>
+<script src="/static/vendor/leaflet.js"></script>
 <script>
 const TYPES = {lost_circulation:"#1f77b4", kick:"#d62728", stuck_pipe:"#9467bd", tight_hole:"#ff7f0e",
   wellbore_instability:"#8c564b", pack_off:"#e377c2", washout:"#17becf", fishing:"#2ca02c",
@@ -130,6 +154,7 @@ async function init() {
     const first = [...wells.results].sort((a, b) => b.events - a.events)[0];
     if (!first) { $("counts").textContent += " · no reports loaded"; return; }
     $("well").value = first.name; state.well = first.name;
+    await initMap();
     $("well").onchange = e => { state.well = e.target.value; state.selected = null; load(); };
     $("radius").onchange = e => { state.radius = +e.target.value; loadOffsets(); };
     load();
@@ -265,12 +290,66 @@ function renderStrip() {
   for (const el of $("strip").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
 }
 
+const FIELD_COLOURS = {OIL: "#4f9d5d", GAS: "#c9584c", "OIL/GAS": "#d49a3a", "GAS/CONDENSATE": "#b0577f", "OIL/CONDENSATE": "#7a9a3c"};
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+let map, wellLayer, blockLayer;
+
+async function initMap() {
+  map = L.map("map", {zoomSnap: .25, minZoom: 3, maxZoom: 13, attributionControl: true, preferCanvas: true})
+         .setView([61, 4], 5);
+  map.attributionControl.setPrefix(false).addAttribution("Quadrants, blocks, fields, wells: SODIR (NLOD 2.0) · Land: Natural Earth");
+  const get = name => fetch(`/static/geo/${name}.geojson`).then(r => r.json());
+  const [land, quadrants, blocks, fields] = await Promise.all(["land", "quadrants", "blocks", "fields"].map(get));
+  L.geoJSON(land, {interactive: false, style: {color: css("--grid"), weight: .6, fillColor: css("--land"), fillOpacity: 1}}).addTo(map);
+  blockLayer = L.geoJSON(blocks, {style: {color: css("--grid"), weight: .4, opacity: .55, fill: true, fillOpacity: 0},
+    onEachFeature: (f, l) => l.bindTooltip(`Block ${f.properties.name}`, {sticky: true})});
+  const labels = L.layerGroup();
+  L.geoJSON(quadrants, {interactive: false, style: {color: css("--grid"), weight: .9, opacity: .8, fill: false},
+    onEachFeature: (f, l) => labels.addLayer(L.marker(l.getBounds().getCenter(), {interactive: false,
+      icon: L.divIcon({className: "qlabel", html: f.properties.name, iconSize: [40, 14]})}))}).addTo(map);
+  L.geoJSON(fields, {style: f => ({color: FIELD_COLOURS[f.properties.hc] || "#888", weight: .8,
+      fillColor: FIELD_COLOURS[f.properties.hc] || "#888", fillOpacity: .45}),
+    onEachFeature: (f, l) => l.bindTooltip(`${f.properties.name} · ${(f.properties.hc || "").toLowerCase()}`, {sticky: true})}).addTo(map);
+  wellLayer = L.layerGroup().addTo(map);
+  const detail = () => {   // quadrant numbers when zoomed out a little, block outlines when zoomed in
+    map.getZoom() >= 5.5 ? labels.addTo(map) : labels.remove();
+    map.getZoom() >= 7 ? blockLayer.addTo(map).bringToBack() : blockLayer.remove();
+  };
+  map.on("zoomend", detail); detail();
+}
+
+function drawMap(origin, radiusKm, nearby, reportWells) {
+  wellLayer.clearLayers();
+  const circle = L.circle([origin.lat, origin.lon], {radius: radiusKm * 1000, color: css("--ink"), weight: 1.2,
+    dashArray: "4 5", fill: false, interactive: false}).addTo(wellLayer);
+  const open = name => { $("well").value = name; state.well = name; state.selected = null; load(); };
+  const near = new Set(nearby.map(w => w.name));
+  for (const w of nearby.filter(w => w.lat != null).sort((a, b) => a.events - b.events)) {
+    const has = w.events > 0;
+    const m = L.circleMarker([w.lat, w.lon], has
+      ? {radius: 5 + Math.sqrt(w.events) * .7, color: css("--panel"), weight: 1.2, fillColor: css("--accent"), fillOpacity: .95}
+      : {radius: 3, stroke: false, fillColor: css("--muted"), fillOpacity: .55}).addTo(wellLayer);
+    m.bindTooltip(`${w.name} · ${fmt(w.distance_km, 1)} km${w.operator ? " · " + w.operator : ""}${has ? ` · ${w.events} events` : ""}`);
+    if (has) { m.on("click", () => open(w.name));
+      L.marker([w.lat, w.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(w.name), iconSize: [0, 0], iconAnchor: [-9, 8]})}).addTo(wellLayer); }
+  }
+  for (const w of reportWells) {   // wells with reports elsewhere on the shelf: visible when zoomed out
+    if (near.has(w.name) || w.name === origin.name || w.lat == null) continue;
+    L.circleMarker([w.lat, w.lon], {radius: 5, color: css("--panel"), weight: 1, fillColor: css("--accent"), fillOpacity: .8})
+      .bindTooltip(`${w.name} · ${w.events} events`).on("click", () => open(w.name)).addTo(wellLayer);
+  }
+  L.circleMarker([origin.lat, origin.lon], {radius: 7, color: css("--panel"), weight: 2, fillColor: css("--ink"), fillOpacity: 1})
+    .bindTooltip(origin.name).addTo(wellLayer);
+  L.marker([origin.lat, origin.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(origin.name), iconSize: [0, 0], iconAnchor: [-11, 8]})}).addTo(wellLayer);
+  map.fitBounds(circle.getBounds(), {padding: [14, 14]});
+}
+
 async function loadOffsets() {
   const [near, off, reports] = await Promise.all([
     api("/api/wells", {near: state.well, radius_km: state.radius, limit: 200}),
     api("/api/offset", {near: state.well, radius_km: state.radius}),
     api("/api/report_wells")]);
-  const o = near.origin, R = state.radius, C = 200, scale = 170 / R, k = Math.cos(o.lat * Math.PI / 180);
+  const o = near.origin, R = state.radius, k = Math.cos(o.lat * Math.PI / 180);
   // the list is capped at the 200 nearest: make sure every well with a report is on the map
   const have = new Set(near.results.map(w => w.name));
   for (const w of reports.results) {
@@ -278,20 +357,7 @@ async function loadOffsets() {
     const dx = (w.lon - o.lon) * 111.32 * k, dy = (w.lat - o.lat) * 110.57, dist = Math.hypot(dx, dy);
     if (dist <= R) near.results.push({...w, distance_km: dist});
   }
-  const px = w => [C + (w.lon - o.lon) * 111.32 * k * scale, C - (w.lat - o.lat) * 110.57 * scale];
-  let s = `<circle cx="${C}" cy="${C}" r="170" fill="var(--soft)" stroke="var(--line)"/>
-    <circle cx="${C}" cy="${C}" r="85" fill="none" stroke="var(--line)" stroke-dasharray="3 4"/>
-    <text x="${C + 4}" y="${C - 173}" class="dim">${R} km</text><text x="${C + 4}" y="${C - 88}" class="dim">${R / 2} km</text>
-    <text x="${C}" y="16" text-anchor="middle" class="dim">N</text>`;
-  for (const w of near.results.filter(w => w.lat != null).sort((a, b) => a.events - b.events)) {
-    const [x, y] = px(w), has = w.events > 0;
-    s += `<circle cx="${x}" cy="${y}" r="${has ? 4 + Math.sqrt(w.events) : 2.2}" fill="${has ? "var(--accent)" : "var(--muted)"}" fill-opacity="${has ? .85 : .45}" ${has ? `data-w="${esc(w.name)}" style="cursor:pointer"` : ""}><title>${esc(w.name)} · ${fmt(w.distance_km, 1)} km · ${esc(w.operator || "")}${has ? ` · ${w.events} events` : ""}</title></circle>`;
-    if (has) s += `<text x="${x + 8}" y="${y + 4}">${esc(w.name)}</text>`;
-  }
-  s += `<path d="M${C} ${C - 8} L${C + 7} ${C + 6} L${C - 7} ${C + 6} Z" fill="var(--ink)"><title>${esc(o.name)}</title></path>
-        <text x="${C + 10}" y="${C + 4}" font-weight="600">${esc(o.name)}</text>`;
-  $("map").innerHTML = s;
-  for (const el of $("map").querySelectorAll("[data-w]")) el.onclick = () => { $("well").value = el.dataset.w; state.well = el.dataset.w; state.selected = null; load(); };
+  drawMap(o, R, near.results, reports.results);
   const withEvents = near.results.filter(w => w.events > 0).length;
   $("maplegend").textContent = `${near.total} wellbores within ${R} km; ${withEvents} of them have a report with events loaded (blue, click to open). Grey: backbone only.`;
   $("offset").innerHTML = off.summary.length
