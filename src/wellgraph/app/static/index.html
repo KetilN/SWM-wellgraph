@@ -45,6 +45,11 @@
   .tabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
   .tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 6px 10px; white-space: nowrap; }
   .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab.nodata { opacity: .45; }
+  .dim-out { opacity: .12; }
+  .gnode { cursor: pointer; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-top: 8px; background: var(--soft); }
+  td.cell { cursor: pointer; } td.cell:hover { outline: 2px solid var(--ink); outline-offset: -2px; }
   .tabs .grow { flex: 1; }
   .tabs .tool { border: 0; background: none; color: var(--muted); padding: 4px 8px; }
   .view { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; display: none; }
@@ -116,9 +121,9 @@
 <div class="workspace" id="workspace">
   <div class="pane" id="left">
     <div class="tabs" role="tablist" data-pane="left">
-      <button class="tab" role="tab" data-view="strip">Well strip</button>
       <button class="tab" role="tab" data-view="map">Map</button>
-      <button class="tab" role="tab" data-view="timedepth">Time–depth</button>
+      <button class="tab" role="tab" data-view="strip">Depth profile</button>
+      <button class="tab" role="tab" data-view="timedepth" id="tab-timedepth">Time–depth</button>
       <button class="tab" role="tab" data-view="graph">Wellbore graph</button>
       <button class="tab" role="tab" data-view="model">Model</button>
       <span class="grow"></span>
@@ -161,6 +166,7 @@
         <label><input type="checkbox" id="ring-planned"> planned (seismic, geology model)</label>
       </p>
       <svg id="model" class="graphbox" viewBox="-130 -10 980 740" role="img" aria-label="Entity types and relationships of the knowledge graph"></svg>
+      <div id="modeldetail"></div>
       <p class="small muted" id="modelnote"></p>
     </div>
   </div>
@@ -169,11 +175,11 @@
 
   <div class="pane" id="right">
     <div class="tabs" role="tablist" data-pane="right">
-      <button class="tab" role="tab" data-view="events">Events</button>
+      <button class="tab" role="tab" data-view="matrix">Across wells</button>
+      <button class="tab" role="tab" data-view="nearby">Nearby</button>
+      <button class="tab" role="tab" data-view="events">This well</button>
       <button class="tab" role="tab" data-view="table">Table</button>
       <button class="tab" role="tab" data-view="source">Source</button>
-      <button class="tab" role="tab" data-view="nearby">Nearby</button>
-      <button class="tab" role="tab" data-view="matrix">Across wells</button>
       <span class="grow"></span>
       <button class="tool" data-max="right" title="Use the full width for this side">⤢</button>
     </div>
@@ -188,6 +194,7 @@
       <h3>Events by formation group and type, all loaded wells</h3>
       <table id="matrix"></table>
       <p class="small muted" id="matrixnote"></p>
+      <div id="drill"></div>
     </div>
   </div>
 </div>
@@ -212,7 +219,7 @@ const GROUP_AGE = {"NORDLAND GP":"Neogene", "HORDALAND GP":"Paleogene", "SOTBAKK
 const stratColour = group => AGE[GROUP_AGE[group]] || "#c9ccd1";
 
 const state = {well: null, radius: 20, off: new Set(), detail: null, selected: null, sort: {key: "depth", dir: 1},
-               tabs: {left: "strip", right: "events"}};
+               tabs: {left: "map", right: "matrix"}, filter: null};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const label = t => t.replaceAll("_", " ");
@@ -283,7 +290,7 @@ async function init() {
     load();
   } catch (err) { $("counts").textContent = "Could not load: " + err.message; }
 }
-function openWell(name) { $("well").value = name; state.well = name; state.selected = null; store.set("wg-well", name); load(); }
+function openWell(name) { $("well").value = name; state.well = name; state.selected = null; state.filter = null; store.set("wg-well", name); return load(); }
 
 async function load() {
   $("evidence").innerHTML = '<p class="muted small">Select an event to see the report text it comes from.</p>';
@@ -307,14 +314,25 @@ function renderKpis() {
     [pct(count(e => e.formations && e.formations.length), n), "formation"], [pct(count(e => e.mud_weight_sg != null), n), "mud weight"]];
   $("kpis").innerHTML = items.map(([v, t]) => `<div class="kpi"><b>${v}</b><span>${t}</span></div>`).join("");
 }
-function visibleEvents() { return state.detail.events.filter(e => !state.off.has(e.event_type)); }
+function visibleEvents() {
+  const f = state.filter;
+  return state.detail.events.filter(e => !state.off.has(e.event_type) &&
+    (!f || (f.kind === "hole" ? Math.abs((e.hole_diameter_in ?? -1) - f.value) < .02 : (e.formations || []).includes(f.value))));
+}
+function setFilter(filter) {
+  state.filter = state.filter && filter && state.filter.kind === filter.kind && state.filter.value === filter.value ? null : filter;
+  renderChips(); renderEvents(); renderTable(); renderStrip(); loadTimeDepth();
+  if (state.filter) showTab("right", "table");
+}
 function renderChips() {
   const counts = {}; for (const e of state.detail.events) counts[e.event_type] = (counts[e.event_type] || 0) + 1;
   const html = Object.keys(TYPES).filter(t => counts[t]).map(t =>
     `<button class="chip ${state.off.has(t) ? "off" : ""}" data-t="${t}"><span class="dot" style="background:${TYPES[t]}"></span>${label(t)} ${counts[t]}</button>`).join("")
     || '<span class="muted small">No events extracted for this wellbore.</span>';
-  for (const id of ["chips", "chips2"]) { $(id).innerHTML = html;
-    for (const b of $(id).querySelectorAll("button")) b.onclick = () => {
+  const f = state.filter, filterChip = f ? `<button class="chip" data-clear="1" title="Remove this filter">only ${f.kind === "hole" ? inches(f.value) + " hole" : esc(f.value)} ✕</button>` : "";
+  for (const id of ["chips", "chips2"]) { $(id).innerHTML = filterChip + html;
+    const clear = $(id).querySelector("[data-clear]"); if (clear) clear.onclick = () => setFilter(null);
+    for (const b of $(id).querySelectorAll("button[data-t]")) b.onclick = () => {
       state.off.has(b.dataset.t) ? state.off.delete(b.dataset.t) : state.off.add(b.dataset.t);
       renderChips(); renderEvents(); renderTable(); renderStrip(); loadTimeDepth(); }; }
 }
@@ -434,6 +452,8 @@ async function loadTimeDepth() {
   const d = await api("/api/daily", {name: state.well});
   const rows = d.rows.filter(r => r.report_date), W = 640, H = 460, L = 52, R = 14, T = 18, B = 34;
   $("tdtitle").textContent = `Time–depth curve, ${d.wellbore}`;
+  $("tab-timedepth").classList.toggle("nodata", rows.length < 2);
+  $("tab-timedepth").title = rows.length < 2 ? "No daily report table found for this wellbore" : "";
   if (rows.length < 2) { $("timedepth").innerHTML = ""; $("tdnote").textContent = "No daily drilling report table was found for this wellbore. Its daily log may be written as plain text, which is not parsed yet."; return; }
   const day0 = new Date(rows[0].report_date), day = r => (new Date(r.report_date) - day0) / 864e5;
   let run = 0; const pts = [];
@@ -470,17 +490,27 @@ function renderModel() {
   if (on.planned) s += `<circle cx="${C}" cy="${C}" r="330" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
   for (const r of ontology.relationships) { const a = pos[r.from], b = pos[r.to]; if (!on[a.e.ring] || !on[b.e.ring]) continue; const core = r.ring === "core";
     if (r.from === r.to) { s += `<circle cx="${a.x + 13}" cy="${a.y - 13}" r="11" fill="none" stroke="var(--ink)" stroke-width="1.1" opacity=".55"><title>${r.from} ${r.name} ${r.to}</title></circle>`; continue; }
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${core ? "var(--ink)" : "var(--muted)"}" stroke-width="${core ? 1.3 : .7}" opacity="${core ? .6 : .45}" ${core ? "" : 'stroke-dasharray="4 4"'}><title>${r.from} ${r.name} ${r.to}</title></line>`; }
+    s += `<line data-s="${r.from}" data-t="${r.to}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${core ? "var(--ink)" : "var(--muted)"}" stroke-width="${core ? 1.3 : .7}" opacity="${core ? .6 : .45}" ${core ? "" : 'stroke-dasharray="4 4"'}><title>${r.from} ${r.name} ${r.to}</title></line>`; }
   for (const {x, y, a, e} of Object.values(pos)) { if (!on[e.ring]) continue;
     const radius = e.ring === "core" ? 9 + Math.log10((e.rows || 1) + 1) * 3.2 : 6;
     const tip = `${e.name} · ${e.osdu_kind}${e.rows != null ? ` · ${e.rows.toLocaleString()} rows` : ""}${e.seen_in_pages ? ` · seen on ${e.seen_in_pages} pages` : ""}\n${e.description}`;
-    s += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${RING_STYLE[e.ring].fill}" fill-opacity="${e.ring === "core" ? .95 : .75}" stroke="var(--panel)" stroke-width="1.5"><title>${esc(tip)}</title></circle>`;
+    s += `<circle class="gnode" data-n="${e.name}" cx="${x}" cy="${y}" r="${radius}" fill="${RING_STYLE[e.ring].fill}" fill-opacity="${e.ring === "core" ? .95 : .75}" stroke="var(--panel)" stroke-width="1.5"><title>${esc(tip)}</title></circle>`;
     const out = e.ring === "core" ? radius + 5 : 10, lx = x + out * Math.cos(a), ly = y + out * Math.sin(a);
     const anchor = Math.abs(Math.cos(a)) < .06 ? "middle" : Math.cos(a) > 0 ? "start" : "end", dy = Math.sin(a) > .5 ? 12 : Math.sin(a) < -.5 ? -3 : 4;
-    s += `<text x="${lx}" y="${ly + dy}" text-anchor="${anchor}" font-size="${e.ring === "core" ? 12 : 10.5}" font-weight="${e.ring === "core" ? 600 : 400}">${esc(e.name)}</text>`;
+    s += `<text data-n="${e.name}" x="${lx}" y="${ly + dy}" text-anchor="${anchor}" font-size="${e.ring === "core" ? 12 : 10.5}" font-weight="${e.ring === "core" ? 600 : 400}">${esc(e.name)}</text>`;
     if (e.ring === "core" && e.rows != null) s += `<text x="${lx}" y="${ly + dy + 12}" text-anchor="${anchor}" font-size="10" class="dim">${e.rows.toLocaleString()}</text>`; }
   $("model").innerHTML = s; const n = ring => ontology.entities.filter(e => e.ring === ring).length;
-  $("modelnote").textContent = `${n("core")} entity types hold data (blue, with row counts); ${n("observed")} more are present in the reports but not extracted (orange); ${n("planned")} are planned with no data source (purple). Solid lines are relationships stored in the graph. Hover for the OSDU kind and meaning.`;
+  const msvg = $("model"), linked = name => new Set([name, ...ontology.relationships.filter(r => r.from === name || r.to === name).flatMap(r => [r.from, r.to])]);
+  const mfocus = name => { const keep = name ? linked(name) : null;
+    for (const el of msvg.querySelectorAll("[data-n]")) el.classList.toggle("dim-out", !!keep && !keep.has(el.dataset.n));
+    for (const el of msvg.querySelectorAll("line[data-s]")) el.classList.toggle("dim-out", !!keep && el.dataset.s !== name && el.dataset.t !== name); };
+  for (const el of msvg.querySelectorAll("circle.gnode")) { el.onmouseenter = () => mfocus(el.dataset.n); el.onmouseleave = () => mfocus(null);
+    el.onclick = () => { const e = ontology.entities.find(x => x.name === el.dataset.n), rels = ontology.relationships.filter(r => r.from === e.name || r.to === e.name);
+      $("modeldetail").innerHTML = `<div class="card"><h3>${esc(e.name)} <span class="tag">${e.ring === "core" ? "in the graph" : e.ring === "observed" ? "in the reports, not extracted" : "planned"}</span></h3>
+        <p class="small" style="margin:4px 0">${esc(e.description)}</p>
+        <p class="small muted" style="margin:4px 0">OSDU kind: ${esc(e.osdu_kind)}${e.rows != null ? ` · ${e.rows.toLocaleString()} rows` : ""}${e.seen_in_pages ? ` · seen on ${e.seen_in_pages} report pages (of 1,208 sampled)` : ""}</p>
+        <p class="small" style="margin:4px 0">${rels.map(r => `${esc(r.from)} <b>${esc(r.name)}</b> ${esc(r.to)}`).join(" · ") || "No relationships defined."}</p></div>`; }; }
+  $("modelnote").textContent = `${n("core")} entity types hold data (blue, with row counts); ${n("observed")} more are present in the reports but not extracted (orange); ${n("planned")} are planned with no data source (purple). Solid lines are relationships stored in the graph. Hover an entity to highlight what it connects to; click it for its meaning, OSDU kind and relationships.`;
 }
 
 // ---- knowledge graph: one wellbore --------------------------------------------------
@@ -503,20 +533,31 @@ async function loadInstanceGraph() {
       n.x = Math.max(24, Math.min(W - 24, n.x)); n.y = Math.max(20, Math.min(H - 20, n.y)); } }
   let s = "";
   for (const l of links) { const a = nodes[l.s], b = nodes[l.t];
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--muted)" stroke-width="${a.kind === "DrillingEvent" ? .6 : 1.2}" opacity="${a.kind === "DrillingEvent" ? .45 : .7}"><title>${esc(a.label)} ${l.relation} ${esc(b.label)}</title></line>`; }
+    s += `<line data-s="${esc(a.id)}" data-t="${esc(b.id)}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--muted)" stroke-width="${a.kind === "DrillingEvent" ? .6 : 1.2}" opacity="${a.kind === "DrillingEvent" ? .45 : .7}"><title>${esc(a.label)} ${l.relation} ${esc(b.label)}</title></line>`; }
   for (const n of nodes) { const st = KIND_STYLE[n.kind], ev = n.kind === "DrillingEvent";
     const fill = ev ? TYPES[n.event_type] : n.kind === "GeologicalFormation" ? stratColour(groupOf(n.id)) : st.fill, exact = !ev || n.depth_basis === "stated";
     const tip = ev ? `${n.label} · ${n.depth_md == null ? "no depth" : fmt(n.depth_md) + " m"} (${basisText[n.depth_basis]})\n${n.description}` : `${n.kind}: ${n.label}`;
-    s += `<circle ${ev ? `data-id="${n.event_id}" style="cursor:pointer"` : ""} cx="${n.x}" cy="${n.y}" r="${st.r}" fill="${exact ? fill : "var(--panel)"}" stroke="${exact ? (n.kind === "GeologicalFormation" ? "rgba(0,0,0,.4)" : "var(--panel)") : fill}" stroke-width="${exact ? 1.2 : 1.8}"><title>${esc(tip)}</title></circle>`;
-    if (!ev) s += `<text x="${n.x + st.r + 3}" y="${n.y + 4}" font-size="${n.kind === "Wellbore" ? 13 : 10.5}" font-weight="${n.kind === "Wellbore" ? 700 : 500}" style="paint-order:stroke;stroke:var(--soft);stroke-width:3px">${esc(n.kind === "HoleSection" ? inches(parseFloat(n.label)) : n.label)}</text>`; }
+    s += `<circle class="gnode" data-n="${esc(n.id)}" ${ev ? `data-id="${n.event_id}"` : ""} cx="${n.x}" cy="${n.y}" r="${st.r}" fill="${exact ? fill : "var(--panel)"}" stroke="${exact ? (n.kind === "GeologicalFormation" ? "rgba(0,0,0,.4)" : "var(--panel)") : fill}" stroke-width="${exact ? 1.2 : 1.8}"><title>${esc(tip)}</title></circle>`;
+    if (!ev) s += `<text data-n="${esc(n.id)}" x="${n.x + st.r + 3}" y="${n.y + 4}" font-size="${n.kind === "Wellbore" ? 13 : 10.5}" font-weight="${n.kind === "Wellbore" ? 700 : 500}" style="paint-order:stroke;stroke:var(--soft);stroke-width:3px">${esc(n.kind === "HoleSection" ? inches(parseFloat(n.label)) : n.label)}</text>`; }
   $("instance").innerHTML = s;
-  for (const el of $("instance").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
+  const svg = $("instance"), neighbours = {};
+  for (const l of g.edges) { (neighbours[l.source] ||= new Set([l.source])).add(l.target); (neighbours[l.target] ||= new Set([l.target])).add(l.source); }
+  const focus = id => { const keep = id ? neighbours[id] || new Set([id]) : null;
+    for (const el of svg.querySelectorAll("[data-n]")) el.classList.toggle("dim-out", !!keep && !keep.has(el.dataset.n));
+    for (const el of svg.querySelectorAll("line[data-s]")) el.classList.toggle("dim-out", !!keep && el.dataset.s !== id && el.dataset.t !== id); };
+  for (const el of svg.querySelectorAll("circle.gnode")) {
+    el.onmouseenter = () => focus(el.dataset.n); el.onmouseleave = () => focus(null);
+    const id = el.dataset.n;
+    if (el.dataset.id) el.onclick = () => select(el.dataset.id);
+    else if (id.startsWith("hs:")) el.onclick = () => setFilter({kind: "hole", value: parseFloat(id.slice(3))});
+    else if (id.startsWith("fm:")) el.onclick = () => setFilter({kind: "fm", value: id.slice(3)});
+  }
   const count = kind => g.nodes.filter(n => n.kind === kind).length;
   $("instancetitle").textContent = `${g.wellbore} as a graph`;
   $("instancelegend").innerHTML = [["Wellbore", "wellbore"], ["HoleSection", "hole section"], ["Document", "report"], ["Field", "field"], ["Organisation", "operator"]]
     .filter(([k]) => count(k)).map(([k, t]) => `<span><i class="dot" style="background:${KIND_STYLE[k].fill}"></i>${t}</span>`).join("") +
     `<span><i class="dot" style="background:${AGE["Upper Cretaceous"]};border:1px solid rgba(0,0,0,.4)"></i>group / formation, coloured by age</span><span><i class="dot" style="background:${TYPES.tight_hole}"></i>event, by type (hollow: depth from context)</span>`;
-  $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in. Click an event to read its source.`;
+  $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in. Hover a node to see what it connects to. Click a hole section or formation to list only its events; click an event to read its source.`;
 }
 
 // ---- across wells -------------------------------------------------------------------
@@ -524,8 +565,21 @@ async function loadMatrix() {
   const m = await api("/api/matrix"), max = Math.max(1, ...m.rows.flatMap(r => Object.values(r.counts)));
   $("matrix").innerHTML = `<tr><th>Formation group</th>${m.event_types.map(t => `<th class="heat" title="${label(t)}"><span class="dot" style="background:${TYPES[t]}"></span><br>${label(t).replace("wellbore ", "")}</th>`).join("")}<th class="num">Events</th><th class="num">Wells</th></tr>` +
     m.rows.map(r => `<tr><td><i class="sw" style="background:${stratColour(r.group)}"></i> ${esc(r.group)}</td>${m.event_types.map(t => { const n = r.counts[t] || 0;
-      return `<td class="heat" style="background:color-mix(in srgb, ${TYPES[t]} ${Math.round(70 * n / max)}%, transparent)">${n || ""}</td>`; }).join("")}<td class="num">${r.total}</td><td class="num">${r.wells}</td></tr>`).join("");
-  $("matrixnote").textContent = `${m.wells_with_events} wellbores with events. An event is counted under the group at its depth; events with only a drilled interval are counted under the shallowest group of that interval. Cell shading is relative to the largest cell.`;
+      return `<td class="heat ${n ? "cell" : ""}" ${n ? `data-g="${esc(r.group)}" data-t="${t}"` : ""} style="background:color-mix(in srgb, ${TYPES[t]} ${Math.round(70 * n / max)}%, transparent)">${n || ""}</td>`; }).join("")}<td class="num">${r.total}</td><td class="num">${r.wells}</td></tr>`).join("");
+  for (const td of $("matrix").querySelectorAll("td.cell")) td.onclick = () => drillDown(td.dataset.g, td.dataset.t);
+  $("matrixnote").textContent = `Click a number to list those events. ${m.wells_with_events} wellbores with events. An event is counted under the group at its depth; events with only a drilled interval are counted under the shallowest group of that interval. Cell shading is relative to the largest cell.`;
+}
+
+async function drillDown(group, type) {
+  const none = group === "(no formation)";
+  const r = await api("/api/events", {event_type: type, formation: none ? null : group, limit: 200});
+  const rows = r.results.filter(e => none ? !(e.formations || []).length : (e.formations || [])[0] === group);
+  $("drill").innerHTML = `<div class="card"><h3><span class="dot" style="background:${TYPES[type]}"></span> ${label(type)} in ${esc(group)}: ${rows.length} events</h3>
+    <table><tr><th>Wellbore</th><th class="num">Depth, m</th><th>Hole</th><th class="num">Mud, sg</th><th>What happened</th></tr>` +
+    rows.map(e => `<tr class="row" data-w="${esc(e.wellbore)}" data-id="${e.event_id}"><td>${esc(e.wellbore)}</td><td class="num">${e.depth_basis === "context_interval" ? fmt(e.context_top_md) + "–" + fmt(e.context_base_md) : fmt(eventDepth(e))}</td>
+      <td>${e.hole_diameter_in ? inches(e.hole_diameter_in) : "–"}</td><td class="num">${fmt(e.mud_weight_sg, 2)}</td><td>${esc(e.description)}</td></tr>`).join("") + `</table></div>`;
+  for (const tr of $("drill").querySelectorAll("tr.row")) tr.onclick = async () => { if (tr.dataset.w !== state.well) await openWell(tr.dataset.w); select(tr.dataset.id); };
+  $("drill").scrollIntoView({behavior: "smooth", block: "nearest"});
 }
 
 // ---- map ----------------------------------------------------------------------------
