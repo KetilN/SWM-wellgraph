@@ -67,7 +67,9 @@ Group in the 12 1/4 in section, and at what mud weight?"
   derived from its depth against SODIR casing and formation-top tables. If the model also
   states them, use that only as a cross-check.
 - Ontology is small and hand-written in `ontology.yaml`. The LLM never invents schema; it
-  fills it. **On hold: do not write `ontology.yaml` until the user says go.**
+  fills it. `ontology.yaml` is a draft with two rings: core (what the graph holds,
+  checked against the table contract by `tests/test_ontology.py`) and planned (the wider
+  SWM proposal: well data, seismic, geology; no data source connected).
 - **OSDU official schemas are the main reference for the data schema** (data-definitions
   repo, community.opengroup.org). The Accenture OSDU Ontology is secondary: it covers
   only Well / Wellbore / WellLog / Trajectory, useful for relation naming.
@@ -108,8 +110,9 @@ Wellbore, IN_SECTION HoleSection, IN_FORMATION GeologicalFormation, EVIDENCED_BY
 Page PAGE_OF Document; Document DESCRIBES Wellbore.
 
 Not in OSDU (do not use): `WellboreEvent`, `WellProblemType`, `LostCirculationType`.
-Ketil's wider entity list (seismic, geology model, petrophysics, saturations) has no data
-in this dataset: treat as future outer-ring types, pending discussion with him.
+The team's wider SWM entity list (well logs, production, seismic, geology model,
+petrophysics, saturations) has no data in this dataset. It is recorded as the planned
+ring in `ontology.yaml`, mapped to OSDU kinds, with the wellbore as the join point.
 
 ## Tech stack
 | Stage | Tool | Notes |
@@ -180,7 +183,7 @@ Next, in order:
 ## Layout
 ```
 data/                     derived files only, git-ignored (factpages/, staging/, kg/)
-ontology.yaml             entity / relationship types (placeholder, on hold)
+ontology.yaml             entity / relationship types: core ring + planned ring (draft)
 schema.yaml               tables, columns, units (placeholder)
 samples/reports/          four report JSONs (25/6, 25/7) for trying the pipeline
 src/wellgraph/

@@ -1,16 +1,295 @@
 # wellgraph ontology: entity types and relationship types of the knowledge graph.
 #
-# STATUS: placeholder. Not agreed yet; nothing reads this file.
+# STATUS: draft. Two rings:
+#   core     what the graph holds today, built from SODIR FactPages and the end-of-well
+#            reports. Each core entity names the table it is stored in
+#            (src/wellgraph/graph/schema.py is the column-level contract).
+#   planned  the wider subsurface model from the team's SWM schema proposal (well data,
+#            seismic, geology). No data source is connected for these yet; they are
+#            listed so both views share one vocabulary and one join point (the wellbore).
 #
-# Intended content, once agreed:
-#   entities:       one entry per node type, with its OSDU kind
-#                   (e.g. Wellbore -> osdu:wks:master-data--Wellbore:1.0.0)
-#   relationships:  one entry per edge type, with from / to entity
+# Entity status:
+#   populated  has rows in the graph
+#   defined    table and columns exist, no rows yet
+#   planned    name and meaning only
 #
-# Reference for names: official OSDU data definitions
-# (https://community.opengroup.org/osdu/data/data-definitions).
-# The proposal under discussion is in docs/PLAN.md, "Proposed ontology".
+# osdu_kind is the closest kind in the official OSDU data definitions
+# (https://community.opengroup.org/osdu/data/data-definitions). Every kind named here was
+# checked to exist at version 1.0.0. For planned entities the fit has not been reviewed
+# in detail. "local" means no OSDU kind is used.
+#
+# tests/test_ontology.py checks this file against the table contract.
 
-version: 0
-entities: {}
-relationships: {}
+version: 1
+
+entities:
+
+  # ----------------------------------------------------------------------------- core
+  Well:
+    ring: core
+    status: populated
+    osdu_kind: master-data--Well
+    stored_as: column well_name on table wellbore
+    source: SODIR FactPages
+    description: The origin of a set of wellbores.
+
+  Wellbore:
+    ring: core
+    status: populated
+    osdu_kind: master-data--Wellbore
+    table: wellbore
+    key: wellbore_id (NPD wellbore id)
+    source: SODIR FactPages (exploration, development and other wellbores)
+    description: >
+      A hole in the ground. Carries operator, field, drilling facility, dates, total
+      depth, water depth and coordinates. The join point for everything else.
+
+  GeologicalFormation:
+    ring: core
+    status: populated
+    osdu_kind: reference-data--GeologicalFormation
+    table: formation
+    source: SODIR lithostratigraphy
+    description: >
+      Lithostratigraphic unit (group, subgroup, formation, member) with its parent unit.
+      Corresponds to "layers" in the SWM proposal, seen along a wellbore.
+
+  HoleSection:
+    ring: core
+    status: populated
+    osdu_kind: master-data--HoleSection
+    table: hole_section
+    source: SODIR casing and leak-off table
+    description: >
+      Section of a wellbore of constant diameter, with the casing set in it
+      (work-product-component--TubularAssembly) and the leak-off value at its shoe
+      (work-product-component--FormationIntegrityTest).
+
+  MudCheck:
+    ring: core
+    status: populated
+    osdu_kind: master-data--FluidsReport
+    table: mud_check
+    source: SODIR mud table
+    description: Mud weight and properties measured at a depth in a wellbore.
+
+  Document:
+    ring: core
+    status: populated
+    osdu_kind: work-product-component--Document
+    table: document
+    source: Diskos end-of-well reports (Zenodo record 24320092)
+    description: One end-of-well / completion report.
+
+  Page:
+    ring: core
+    status: populated
+    osdu_kind: local
+    table: page
+    source: report JSON
+    description: OCR text and summary of one report page. Carries the provenance.
+
+  DrillingEvent:
+    ring: core
+    status: defined
+    osdu_kind: master-data--Risk
+    table: event
+    source: extracted from report pages by a language model, then depth-joined
+    description: >
+      Something that went wrong while drilling (lost circulation, kick, stuck pipe, tight
+      hole, instability, pack-off, washout, fishing, unplanned sidetrack) with depth
+      interval, mud weight, remedy, lesson and a verbatim quote.
+
+  # -------------------------------------------------------------------------- planned
+  # From the SWM schema proposal. Names in "proposal_name" are the proposal's own.
+
+  WellLog:
+    ring: planned
+    status: planned
+    domain: well
+    proposal_name: welllog
+    osdu_kind: work-product-component--WellLog
+    description: Log curves measured along a wellbore.
+
+  ProductionData:
+    ring: planned
+    status: planned
+    domain: well
+    proposal_name: production_data
+    osdu_kind: work-product-component--ProductionValues
+    description: Produced volumes over time for a well.
+
+  InjectionData:
+    ring: planned
+    status: planned
+    domain: well
+    proposal_name: injection_data
+    osdu_kind: work-product-component--ProductionValues
+    description: Injected volumes over time for a well.
+
+  WellSchedule:
+    ring: planned
+    status: planned
+    domain: well
+    proposal_name: well_schedule
+    osdu_kind: local
+    description: Planned operating schedule of a well. No OSDU kind identified.
+
+  Seismic2D:
+    ring: planned
+    status: planned
+    domain: seismic
+    proposal_name: 2dseismic
+    osdu_kind: master-data--Seismic2DInterpretationSet
+    description: 2D seismic lines.
+
+  Seismic3D:
+    ring: planned
+    status: planned
+    domain: seismic
+    proposal_name: 3dseismic
+    osdu_kind: master-data--Seismic3DInterpretationSet
+    description: 3D seismic volume.
+
+  Seismic4DVintage:
+    ring: planned
+    status: planned
+    domain: seismic
+    proposal_name: 4dseismic / 4dseismic_vintages
+    osdu_kind: master-data--SeismicAcquisitionSurvey
+    description: >
+      One acquisition in a time-lapse (4D) series. A 4D dataset is a set of vintages over
+      the same area.
+
+  SeismicAttribute:
+    ring: planned
+    status: planned
+    domain: seismic
+    proposal_name: seismic_attributes
+    osdu_kind: work-product-component--SeismicTraceData
+    attribute_types: [acoustic_impedance, vp_vs, dip, azimuth]
+    description: >
+      Attribute volume derived from seismic. The attribute type is a property of the
+      volume (reference-data--SeismicAttributeType), not an entity of its own.
+
+  Layer:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: layers
+    osdu_kind: work-product-component--StratigraphicUnitInterpretation
+    description: >
+      Layer bounded by horizons. In the core ring the same thing is seen along wellbores
+      as GeologicalFormation plus the PENETRATES relationship.
+
+  Horizon:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: horizons
+    osdu_kind: work-product-component--HorizonInterpretation
+    approximation: horizontal plane
+    description: Surface separating two layers.
+
+  Fault:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: faults
+    osdu_kind: work-product-component--FaultInterpretation
+    approximation: vertical plane
+    description: Fault surface.
+
+  Boundary:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: boundary
+    osdu_kind: work-product-component--GeobodyBoundaryInterpretation
+    approximation: vertical plane
+    description: Boundary between regions that is not a fault.
+
+  Region:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: regions
+    osdu_kind: work-product-component--ReservoirCompartmentInterpretation
+    description: >
+      Zone within a layer delimited by faults or boundaries. Regions in the same layer
+      share one petrophysical model.
+
+  PetrophysicalModel:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: petrophysical_model
+    osdu_kind: work-product-component--RockFluidUnitInterpretation
+    properties: [porosity, permeability, relative_permeability, capillary_pressure, wettability]
+    description: >
+      Rock and fluid properties of a region. PORO, PERM, RELPERM, CAPPRESS and
+      Wettability are properties of the model, not entities.
+
+  Grid3D:
+    ring: planned
+    status: planned
+    domain: geology
+    proposal_name: 3dgrids
+    osdu_kind: work-product-component--IjkGridRepresentation
+    cell_properties: [water_saturation, oil_saturation]
+    description: >
+      Regular 3D grid implementing the layers and regions. Water saturation (sw) and oil
+      saturation (s_oil) are cell properties of the grid
+      (work-product-component--GenericProperty), not entities. Oil fields only.
+
+relationships:
+
+  # ----------------------------------------------------------------------------- core
+  BELONGS_TO: {from: Wellbore, to: Well, ring: core, stored_as: wellbore.well_name}
+  PENETRATES:
+    from: Wellbore
+    to: GeologicalFormation
+    ring: core
+    table: formation_top
+    properties: [top_md, base_md]
+    osdu_kind: work-product-component--WellboreMarkerSet
+  PART_OF: {from: GeologicalFormation, to: GeologicalFormation, ring: core, stored_as: formation.parent}
+  SECTION_OF: {from: HoleSection, to: Wellbore, ring: core, stored_as: hole_section.wellbore_id}
+  MEASURED_IN: {from: MudCheck, to: Wellbore, ring: core, stored_as: mud_check.wellbore_id}
+  DESCRIBES: {from: Document, to: Wellbore, ring: core, stored_as: document.wellbore_id}
+  PAGE_OF: {from: Page, to: Document, ring: core, stored_as: page.document_id}
+  OCCURRED_IN: {from: DrillingEvent, to: Wellbore, ring: core, stored_as: event.wellbore_id}
+  IN_SECTION:
+    from: DrillingEvent
+    to: HoleSection
+    ring: core
+    stored_as: event.hole_diameter_in
+    derived: depth join against hole_section (measured depth only)
+  IN_FORMATION:
+    from: DrillingEvent
+    to: GeologicalFormation
+    ring: core
+    stored_as: event.formations
+    derived: depth join against formation_top (measured depth only)
+  EVIDENCED_BY:
+    from: DrillingEvent
+    to: Page
+    ring: core
+    stored_as: event.document_id + event.page_no
+    properties: [text_span, confidence]
+
+  # -------------------------------------------------------------------------- planned
+  LOGGED_IN: {from: WellLog, to: Wellbore, ring: planned}
+  PRODUCED_FROM: {from: ProductionData, to: Well, ring: planned}
+  INJECTED_INTO: {from: InjectionData, to: Well, ring: planned}
+  SCHEDULED_FOR: {from: WellSchedule, to: Well, ring: planned}
+  VINTAGE_OF: {from: Seismic4DVintage, to: Seismic3D, ring: planned}
+  DERIVED_FROM: {from: SeismicAttribute, to: Seismic3D, ring: planned}
+  BOUNDED_BY: {from: Layer, to: Horizon, ring: planned}
+  CORRELATES_WITH: {from: Layer, to: GeologicalFormation, ring: planned, note: link between the two rings}
+  WITHIN: {from: Region, to: Layer, ring: planned}
+  DELIMITED_BY_FAULT: {from: Region, to: Fault, ring: planned}
+  DELIMITED_BY_BOUNDARY: {from: Region, to: Boundary, ring: planned}
+  HAS_MODEL: {from: Region, to: PetrophysicalModel, ring: planned}
+  DISCRETISES: {from: Grid3D, to: Layer, ring: planned}
+  INTERSECTS: {from: Wellbore, to: Region, ring: planned, note: link between the two rings}
