@@ -7,15 +7,19 @@ tools use, so the page and an agent always see the same data.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 
 from wellgraph.graph.store import GraphStore, NotFound
 
+ONTOLOGY = Path(os.environ.get("WELLGRAPH_ONTOLOGY")
+                or Path(__file__).resolve().parents[3] / "ontology.yaml")
 STATIC = Path(__file__).parent / "static"
 INDEX = STATIC / "index.html"
 CONTENT_TYPES = {".js": "text/javascript", ".css": "text/css", ".geojson": "application/geo+json",
@@ -123,6 +127,25 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
             formation=_text(request, "formation"), hole_size=_text(request, "hole_size"),
         )
 
+    def graph(request: Request):
+        name = _text(request, "name")
+        if not name:
+            raise ValueError("Give a wellbore name: /api/graph?name=15/9-19 A")
+        return store.wellbore_graph(name)
+
+    def ontology(request: Request):
+        spec = yaml.safe_load(ONTOLOGY.read_text(encoding="utf-8"))
+        entities = [
+            {"name": name, "ring": e["ring"], "status": e["status"], "osdu_kind": e["osdu_kind"],
+             "description": " ".join(str(e.get("description", "")).split()),
+             "rows": store.table_rows(e["table"]) if e.get("table") else None,
+             "seen_in_pages": (e.get("seen_in") or {}).get("pages")}
+            for name, e in spec["entities"].items()
+        ]
+        relationships = [{"name": name, "from": r["from"], "to": r["to"], "ring": r["ring"]}
+                         for name, r in spec["relationships"].items()]
+        return {"entities": entities, "relationships": relationships}
+
     def evidence(request: Request):
         event_id = _text(request, "id")
         if not event_id:
@@ -132,6 +155,6 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
     for path, handler in {
         "/api/describe": describe, "/api/report_wells": report_wells, "/api/wells": wells,
         "/api/well": well, "/api/events": events, "/api/offset": offset,
-        "/api/evidence": evidence,
+        "/api/evidence": evidence, "/api/graph": graph, "/api/ontology": ontology,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

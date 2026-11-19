@@ -83,3 +83,34 @@ def test_base_map_files_are_small_enough_to_ship(client):
     total = sum(len(client.get(f"/static/geo/{n}.geojson").content)
                 for n in ("land", "quadrants", "blocks", "fields"))
     assert total < 1_000_000
+
+
+# --- knowledge graph views -----------------------------------------------------------
+
+def test_wellbore_graph_has_typed_nodes_and_edges_between_existing_nodes(client):
+    g = client.get("/api/graph", params={"name": "99/1-1"}).json()
+    ids = {n["id"] for n in g["nodes"]}
+    kinds = {n["kind"] for n in g["nodes"]}
+    assert {"Wellbore", "HoleSection", "GeologicalFormation", "DrillingEvent", "Document",
+            "Organisation", "Field"} <= kinds
+    assert all(e["source"] in ids and e["target"] in ids for e in g["edges"])
+    relations = {e["relation"] for e in g["edges"]}
+    assert {"SECTION_OF", "PENETRATES", "IN_SECTION", "IN_FORMATION", "DESCRIBES",
+            "DRILLED_BY", "PART_OF"} <= relations
+    loss = next(n for n in g["nodes"] if n["id"] == "ev:ev-1")
+    assert loss["event_type"] == "lost_circulation" and loss["depth_basis"] == "stated"
+    # the loss sits in the 12 1/4 in section and in the Tor Formation (its most specific unit)
+    targets = {e["target"] for e in g["edges"] if e["source"] == "ev:ev-1"}
+    assert targets == {"hs:12.25", "fm:TOR FM"}
+    assert client.get("/api/graph", params={"name": "nope"}).status_code == 404
+
+
+def test_ontology_endpoint_returns_rings_and_row_counts(client):
+    o = client.get("/api/ontology").json()
+    entities = {e["name"]: e for e in o["entities"]}
+    assert entities["Wellbore"]["ring"] == "core" and entities["Wellbore"]["rows"] == 4
+    assert entities["DrillingEvent"]["rows"] == 6
+    assert entities["Seismic3D"]["ring"] == "planned" and entities["Seismic3D"]["rows"] is None
+    assert {"core", "observed", "planned"} == {e["ring"] for e in o["entities"]}
+    names = set(entities)
+    assert all(r["from"] in names and r["to"] in names for r in o["relationships"])

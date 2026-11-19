@@ -277,6 +277,82 @@ class GraphStore:
             [wid],
         )
 
+    def table_rows(self, table: str) -> int | None:
+        """Row count of a graph table, including ones the tools do not read; None if absent."""
+        if table in TABLES:
+            return self._scalar(f"select count(*) from {table}")
+        path = self.directory / f"{table}.parquet"
+        if not re.fullmatch(r"[a-z_]+", table) or not path.is_file():
+            return None
+        escaped = str(path).replace("'", "''")
+        return self._scalar(f"select count(*) from read_parquet('{escaped}')")
+
+    def wellbore_graph(self, wellbore: str) -> dict[str, Any]:
+        """The part of the graph around one wellbore, as nodes and edges for drawing."""
+        summary = self.well_summary(wellbore)
+        wb = summary["wellbore"]
+        events = self.query_events(wellbore=wb["name"], limit=MAX_LIMIT)["results"]
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, str]] = []
+
+        def node(node_id: str, kind: str, label: str, **extra: Any) -> str:
+            nodes.setdefault(node_id, {"id": node_id, "kind": kind, "label": label, **extra})
+            return node_id
+
+        def edge(source: str, target: str, relation: str) -> None:
+            edges.append({"source": source, "target": target, "relation": relation})
+
+        root = node("wb", "Wellbore", wb["name"])
+        if wb.get("operator"):
+            edge(root, node(f"org:{wb['operator']}", "Organisation", wb["operator"]), "DRILLED_BY")
+        if wb.get("field"):
+            edge(root, node(f"field:{wb['field']}", "Field", wb["field"]), "IN_FIELD")
+        for doc in summary["documents"]:
+            edge(node(f"doc:{doc['document_id']}", "Document", doc["title"] or "report",
+                      pages=doc["n_pages"]), root, "DESCRIBES")
+        for section in summary["hole_sections"]:
+            if section["hole_diameter_in"] is not None:
+                size = section["hole_diameter_in"]
+                edge(node(f"hs:{size:g}", "HoleSection", f"{size:g} in", base_md=section["base_md"]),
+                     root, "SECTION_OF")
+        parents = {t["formation"]: t["parent"] for t in summary["formation_tops"]}
+        levels = {t["formation"]: t["level"] for t in summary["formation_tops"]}
+
+        def formation(name: str) -> str:
+            node_id = node(f"fm:{name}", "GeologicalFormation", name, level=levels.get(name))
+            parent = parents.get(name)
+            if parent and not any(e["source"] == node_id and e["relation"] == "PART_OF"
+                                  for e in edges):
+                edge(node_id, formation(parent), "PART_OF")
+            elif not parent and not any(e["target"] == node_id and e["relation"] == "PENETRATES"
+                                        for e in edges):
+                edge(root, node_id, "PENETRATES")
+            return node_id
+
+        for top in summary["formation_tops"]:
+            if top["level"] == "GROUP":
+                formation(top["formation"])
+        for e in events:
+            depth = e["top_md"] if e["top_md"] is not None else e["context_top_md"]
+            ev = node(f"ev:{e['event_id']}", "DrillingEvent", e["event_type"].replace("_", " "),
+                      event_id=e["event_id"], event_type=e["event_type"], depth_md=depth,
+                      depth_basis=e["depth_basis"], description=e["description"])
+            linked = False
+            if e["hole_diameter_in"] is not None:
+                size = e["hole_diameter_in"]
+                edge(ev, node(f"hs:{size:g}", "HoleSection", f"{size:g} in"), "IN_SECTION")
+                if not any(x["source"] == f"hs:{size:g}" and x["target"] == root for x in edges):
+                    edge(f"hs:{size:g}", root, "SECTION_OF")
+                linked = True
+            units = [u for u in (e["formations"] or []) if u in levels]
+            if units:  # the most specific unit; for an interval, its group only
+                unit = units[0] if e["depth_basis"] == "context_interval" else units[-1]
+                edge(ev, formation(unit), "IN_FORMATION")
+                linked = True
+            if not linked:
+                edge(ev, root, "OCCURRED_IN")
+        return {"wellbore": wb["name"], "nodes": list(nodes.values()), "edges": edges}
+
     def find_wells(
         self,
         block: str | None = None,
