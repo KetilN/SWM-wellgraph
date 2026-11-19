@@ -17,7 +17,7 @@ TABLES: dict[str, dict[str, str]] = {
         "wellbore_id": "BIGINT",  # NPD wellbore id (wlbNpdidWellbore)
         "name": "VARCHAR",  # e.g. "15/9-19 A"
         "well_name": "VARCHAR",
-        "wellbore_type": "VARCHAR",  # EXPLORATION | DEVELOPMENT | OTHER
+        "wellbore_type": "VARCHAR",  # EXPLORATION | DEVELOPMENT | OTHER (shallow, soil, scientific)
         "purpose": "VARCHAR",
         "operator": "VARCHAR",
         "field": "VARCHAR",
@@ -34,7 +34,7 @@ TABLES: dict[str, dict[str, str]] = {
     "formation_top": {
         "wellbore_id": "BIGINT",
         "formation": "VARCHAR",  # SODIR unit name, e.g. "SHETLAND GP"
-        "level": "VARCHAR",  # GROUP | FORMATION | MEMBER
+        "level": "VARCHAR",  # GROUP | SUBGROUP | FORMATION | MEMBER
         "parent": "VARCHAR",
         "top_md": "DOUBLE",
         "base_md": "DOUBLE",
@@ -57,6 +57,14 @@ TABLES: dict[str, dict[str, str]] = {
         "relative_path": "VARCHAR",  # path inside the Zenodo archive
         "n_pages": "INTEGER",
     },
+    # Report page text, so an event's source page can be shown (local type, no OSDU kind)
+    "page": {
+        "document_id": "VARCHAR",
+        "page_no": "INTEGER",  # 0-based, as in the report JSON
+        "text": "VARCHAR",  # OCR markdown of the page
+        "summary": "VARCHAR",
+        "quality": "VARCHAR",  # Reliable | Acceptable | Uncertain | Figure-dominated
+    },
     # osdu:wks:master-data--Risk, RiskType "event" (LLM-extracted, depth-joined)
     "event": {
         "event_id": "VARCHAR",
@@ -74,6 +82,9 @@ TABLES: dict[str, dict[str, str]] = {
         "page_no": "INTEGER",  # 0-based, as in the report JSON
         "text_span": "VARCHAR",  # verbatim quote from the page
         "confidence": "DOUBLE",
+        "depth_ref": "VARCHAR",  # see DEPTH_REFS; hole size / formations only joined for MD
+        "mud_weight_raw": "VARCHAR",  # as written in the report, e.g. "10.5 ppg"
+        "mud_weight_kind": "VARCHAR",  # see MUD_WEIGHT_KINDS
     },
 }
 
@@ -83,7 +94,27 @@ EVENT_TYPES = [
     "stuck_pipe",
     "tight_hole",
     "wellbore_instability",
+    "pack_off",  # hole packing off around the string (not the wellhead pack-off seal)
+    "washout",
+    "fishing",  # fishing job, twist-off, lost-in-hole
+    "sidetrack",  # unplanned sidetrack forced by a hole problem
     "other",
+]
+
+# What an event depth is measured along. Most report depths carry no reference at all.
+DEPTH_REFS = [
+    "MD",  # stated as measured depth (mMD, m MD RT, m RKB along hole)
+    "TVD",  # stated as true vertical depth: do not join against MD tables
+    "TVDSS",  # true vertical depth subsea: do not join against MD tables
+    "ASSUMED_MD",  # no reference written; treated as measured depth
+]
+
+# What the mud weight on an event refers to. Leak-off, pore pressure and cement slurry
+# densities are not event mud weights and must not be stored here.
+MUD_WEIGHT_KINDS = [
+    "mud_in_hole",  # static mud weight in use when the event happened
+    "ecd",  # equivalent circulating density
+    "unknown",
 ]
 
 SOURCE_DOI = "10.5281/zenodo.24320092"

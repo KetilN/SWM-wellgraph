@@ -159,20 +159,27 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         ] = False,
         min_mud_weight_sg: Annotated[float | None, Field(description="Minimum mud weight, sg.")] = None,
         max_mud_weight_sg: Annotated[float | None, Field(description="Maximum mud weight, sg.")] = None,
+        mud_weight_kind: Annotated[
+            str | None,
+            Field(description="mud_in_hole, ecd or unknown. Omit to include all."),
+        ] = None,
         limit: Limit = None,
     ) -> dict[str, Any]:
         """List drilling events across wells, filtered by any combination of event type,
         formation (matches the unit or any parent/child unit at that depth), hole size,
         wellbore, distance, and mud weight range. This is the tool for cross-well
         questions such as 'losses in the Shetland Group in the 12 1/4 in section within
-        20 km, and at what mud weight'. Each row has depth interval, mud weight, hole
-        size, formations, description, remedy, lesson and an event_id for get_evidence."""
+        20 km, and at what mud weight'. Each row has depth interval with depth_ref
+        (MD, TVD, TVDSS, or ASSUMED_MD when the report gave no reference), mud weight in
+        sg with the value as written (mud_weight_raw) and what it is (mud_weight_kind),
+        hole size, formations, description, remedy, lesson and an event_id for
+        get_evidence. Hole size and formations are empty for TVD / TVDSS depths."""
         return guarded(
             store.query_events, event_type=event_type, formation=formation,
             hole_size=hole_size, wellbore=wellbore, near_wellbore=near_wellbore,
             lat=lat, lon=lon, radius_km=radius_km, include_reference=include_reference,
             min_mud_weight_sg=min_mud_weight_sg, max_mud_weight_sg=max_mud_weight_sg,
-            limit=limit,
+            mud_weight_kind=mud_weight_kind, limit=limit,
         )
 
     @mcp.tool(annotations=READ_ONLY)
@@ -187,7 +194,7 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         """Aggregate what happened in offset wells around a wellbore or a planned
         location (lat/lon). Returns the offset wells with distances, then events grouped
         by event type and hole size with counts, number of wells affected, mud weight
-        range, depth range, the wellbores involved and event_ids, plus recorded lessons
+        range (static mud weight only; max_ecd_sg is reported separately), depth range, the wellbores involved and event_ids, plus recorded lessons
         learned. Optionally restrict to one formation or hole size."""
         return guarded(
             store.offset_analysis, near_wellbore=near_wellbore, lat=lat, lon=lon,
@@ -197,10 +204,15 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
     @mcp.tool(annotations=READ_ONLY)
     def get_evidence(
         event_id: Annotated[str, Field(description="event_id from query_events.")],
+        include_page_text: Annotated[
+            bool,
+            Field(description="Also return the OCR text of the source page (up to 8000 chars)."),
+        ] = False,
     ) -> dict[str, Any]:
         """Return the source of one event: the verbatim text span, report title, page
-        (page_no is 0-based; pdf_page is the page to open), path of the report inside the
-        Zenodo archive, extraction confidence, and the DOI to cite."""
-        return guarded(store.evidence, event_id)
+        (page_no is 0-based; pdf_page is the page to open), a summary of that page, path
+        of the report inside the Zenodo archive, extraction confidence, and the DOI to
+        cite. Set include_page_text to read the whole source page for context."""
+        return guarded(store.evidence, event_id, include_page_text)
 
     return mcp

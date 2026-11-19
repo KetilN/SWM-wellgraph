@@ -114,7 +114,6 @@ def test_offset_analysis_aggregates_by_type_and_section(store):
     rows = {(r["event_type"], r["hole_diameter_in"]): r for r in out["summary"]}
     losses = rows[("lost_circulation", 12.25)]
     assert losses["events"] == 2 and losses["wells"] == 2
-    assert losses["min_mud_weight_sg"] == 1.50 and losses["max_mud_weight_sg"] == 1.52
     assert set(losses["event_ids"]) == {"ev-2", "ev-4"}
     assert ("kick", 8.5) in rows and ("tight_hole", 17.5) in rows
 
@@ -164,3 +163,55 @@ def test_backbone_only_graph_still_answers(backbone_only_dir):
 def test_missing_graph_directory_is_a_clear_error(tmp_path):
     with pytest.raises(FileNotFoundError):
         GraphStore(tmp_path / "nope")
+
+
+# --- depth reference, mud weight kind, page text -------------------------------------
+
+def test_events_expose_depth_ref_and_mud_weight_kind(store):
+    rows = {e["event_id"]: e for e in store.query_events(limit=50)["results"]}
+    assert rows["ev-5"]["depth_ref"] == "TVD"
+    assert rows["ev-4"]["mud_weight_kind"] == "ecd" and rows["ev-4"]["mud_weight_raw"] == "12.7 ppg"
+
+
+def test_offset_mud_weight_range_ignores_ecd(store):
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)
+    losses = {(r["event_type"], r["hole_diameter_in"]): r for r in out["summary"]}[
+        ("lost_circulation", 12.25)
+    ]
+    # ev-2 is mud in hole at 1.50; ev-4 (1.52) is an ECD and must not widen the range
+    assert losses["min_mud_weight_sg"] == 1.50 and losses["max_mud_weight_sg"] == 1.50
+    assert losses["events"] == 2
+
+
+def test_query_events_can_filter_by_mud_weight_kind(store):
+    out = store.query_events(event_type="lost_circulation", mud_weight_kind="mud_in_hole")
+    assert {e["event_id"] for e in out["results"]} == {"ev-1", "ev-2"}
+    with pytest.raises(ValueError):
+        store.query_events(mud_weight_kind="heavy")
+
+
+def test_evidence_includes_page_summary_and_optional_page_text(store):
+    brief = store.evidence("ev-1")
+    assert brief["page_summary"] == "Daily report: losses at 2500 m."
+    assert "page_text" not in brief
+    full = store.evidence("ev-1", include_page_text=True)
+    assert "12 1/4 in hole" in full["page_text"] and full["page_text_truncated"] is False
+    assert full["depth_ref"] == "ASSUMED_MD" and full["mud_weight_raw"] == "1.45 sg"
+
+
+def test_evidence_without_stored_page_still_works(store):
+    ev = store.evidence("ev-4", include_page_text=True)
+    assert ev["page_summary"] is None and ev["page_text"] is None
+
+
+def test_describe_lists_depth_refs_and_new_event_types(store):
+    d = store.describe()
+    assert "TVD" in d["depth_refs"] and "ecd" in d["mud_weight_kinds"]
+    assert {"pack_off", "washout", "fishing", "sidetrack"} <= set(d["event_types"])
+    assert d["counts"]["page"] == 2
+
+
+def test_resolve_technical_sidetrack_falls_back_to_parent(store):
+    wb = store.resolve_wellbore("99/1-2 AT2")
+    assert wb["name"] == "99/1-2 A" and wb["matched_as_sidetrack_of"] == "99/1-2 A"
+    assert store.resolve_wellbore("99/1-1 T3")["name"] == "99/1-1"

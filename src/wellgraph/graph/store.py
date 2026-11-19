@@ -13,9 +13,18 @@ from typing import Any
 
 import duckdb
 
-from .schema import ATTRIBUTION, EVENT_TYPES, SOURCE_DOI, SOURCE_URL, TABLES
+from .schema import (
+    ATTRIBUTION,
+    DEPTH_REFS,
+    EVENT_TYPES,
+    MUD_WEIGHT_KINDS,
+    SOURCE_DOI,
+    SOURCE_URL,
+    TABLES,
+)
 
 MAX_LIMIT = 200
+MAX_PAGE_TEXT_CHARS = 8000
 DEFAULT_LIMIT = 50
 NO_EVENTS_NOTE = (
     "Drilling events have not been loaded into this graph yet; only backbone data "
@@ -134,6 +143,15 @@ class GraphStore:
         rows = self._rows("select * exclude (name_key) from wb where name_key = ?", [key])
         if len(rows) == 1:
             return rows[0]
+        # Report names can carry a technical-sidetrack suffix (T2, T3 ...) that SODIR does
+        # not register as its own wellbore: fall back to the parent wellbore.
+        parent = re.sub(r"T\d+$", "", key)
+        if parent != key:
+            rows = self._rows(
+                "select * exclude (name_key) from wb where name_key = ?", [parent]
+            )
+            if len(rows) == 1:
+                return {**rows[0], "matched_as_sidetrack_of": rows[0]["name"]}
         prefix = re.match(r"^[0-9/]+", key)
         like = (prefix.group(0) if prefix and prefix.group(0) else key[:4]) + "%"
         near = self._rows(
@@ -196,10 +214,19 @@ class GraphStore:
                 "bounding_box": bounds,
             },
             "event_types": EVENT_TYPES,
+            "depth_refs": DEPTH_REFS,
+            "mud_weight_kinds": MUD_WEIGHT_KINDS,
             "events_by_type": {r["event_type"]: r["n"] for r in by_type},
             "units": {
-                "depth": "metres measured depth (MD)",
-                "mud_weight": "specific gravity (sg)",
+                "depth": (
+                    "metres; measured depth (MD) for backbone tables. Event depths carry "
+                    "depth_ref: ASSUMED_MD means the report wrote no reference; TVD / TVDSS "
+                    "events are not joined to hole sections or formations"
+                ),
+                "mud_weight": (
+                    "specific gravity (sg), converted; mud_weight_raw is as written and "
+                    "mud_weight_kind says mud_in_hole, ecd or unknown"
+                ),
                 "hole_size": "inches",
                 "distance": "km",
             },
@@ -305,7 +332,7 @@ class GraphStore:
 
     def _event_filter(
         self, event_type, formation, hole_size, wellbore, origin, radius_km,
-        include_reference, min_mud_weight_sg, max_mud_weight_sg,
+        include_reference, min_mud_weight_sg, max_mud_weight_sg, mud_weight_kind=None,
     ) -> tuple[str, list[Any], str]:
         where, params = ["true"], []
         distance = "null"
@@ -336,6 +363,15 @@ class GraphStore:
             if origin[2] is not None and not include_reference:
                 where.append("e.wellbore_id <> ?")
                 params.append(origin[2])
+        if mud_weight_kind:
+            kind = mud_weight_kind.strip().lower()
+            if kind not in MUD_WEIGHT_KINDS:
+                raise ValueError(
+                    f"Unknown mud_weight_kind {mud_weight_kind!r}. "
+                    f"Use one of: {', '.join(MUD_WEIGHT_KINDS)}."
+                )
+            where.append("e.mud_weight_kind = ?")
+            params.append(kind)
         if min_mud_weight_sg is not None:
             where.append("e.mud_weight_sg >= ?")
             params.append(float(min_mud_weight_sg))
@@ -357,20 +393,22 @@ class GraphStore:
         include_reference: bool = False,
         min_mud_weight_sg: float | None = None,
         max_mud_weight_sg: float | None = None,
+        mud_weight_kind: str | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
         limit = _clamp(limit)
         origin = self._origin(near_wellbore, lat, lon)
         clause, params, distance = self._event_filter(
             event_type, formation, hole_size, wellbore, origin, radius_km,
-            include_reference, min_mud_weight_sg, max_mud_weight_sg,
+            include_reference, min_mud_weight_sg, max_mud_weight_sg, mud_weight_kind,
         )
         base = f"from event e join wb w using (wellbore_id) where {clause}"
         total = self._scalar(f"select count(*) {base}", params)
         rows = self._rows(
             f"""
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
-                   e.mud_weight_sg, e.hole_diameter_in, e.formations, e.description,
+                   e.depth_ref, e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.hole_diameter_in, e.formations, e.description,
                    e.remedy, e.lesson, round({distance}, 2) as distance_km,
                    e.document_id, e.page_no, e.confidence
             {base}
@@ -417,12 +455,14 @@ class GraphStore:
         clause, params, _ = self._event_filter(
             None, formation, hole_size, None, origin, radius, False, None, None
         )
+        static = "coalesce(e.mud_weight_kind, 'unknown') <> 'ecd'"
         summary = self._rows(
             f"""
             select e.event_type, e.hole_diameter_in,
                    count(*) as events, count(distinct e.wellbore_id) as wells,
-                   min(e.mud_weight_sg) as min_mud_weight_sg,
-                   max(e.mud_weight_sg) as max_mud_weight_sg,
+                   min(e.mud_weight_sg) filter (where {static}) as min_mud_weight_sg,
+                   max(e.mud_weight_sg) filter (where {static}) as max_mud_weight_sg,
+                   max(e.mud_weight_sg) filter (where e.mud_weight_kind = 'ecd') as max_ecd_sg,
                    round(min(e.top_md), 1) as shallowest_md,
                    round(max(e.base_md), 1) as deepest_md,
                    list(distinct w.name order by w.name) as wellbores,
@@ -447,14 +487,17 @@ class GraphStore:
             "note": None if self.loaded["event"] else NO_EVENTS_NOTE,
         }
 
-    def evidence(self, event_id: str) -> dict[str, Any]:
+    def evidence(self, event_id: str, include_page_text: bool = False) -> dict[str, Any]:
         rows = self._rows(
             """
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
-                   e.mud_weight_sg, e.text_span, e.page_no, e.confidence,
-                   e.document_id, d.title, d.relative_path, d.n_pages
+                   e.depth_ref, e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.text_span, e.page_no, e.confidence,
+                   e.document_id, d.title, d.relative_path, d.n_pages,
+                   p.summary as page_summary, p.quality as page_quality, p.text as page_text
             from event e join wb w using (wellbore_id)
             left join document d using (document_id)
+            left join page p on p.document_id = e.document_id and p.page_no = e.page_no
             where e.event_id = ?
             """,
             [event_id],
@@ -462,6 +505,10 @@ class GraphStore:
         if not rows:
             raise NotFound(f"No event with id {event_id!r}. Get ids from query_events.")
         r = rows[0]
+        page_text = r.pop("page_text")
+        if include_page_text:
+            r["page_text"] = None if page_text is None else page_text[:MAX_PAGE_TEXT_CHARS]
+            r["page_text_truncated"] = bool(page_text and len(page_text) > MAX_PAGE_TEXT_CHARS)
         document = {
             "document_id": r.pop("document_id"),
             "title": r.pop("title"),
