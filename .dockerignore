@@ -1,0 +1,16 @@
+# Keep the build context small and free of data and secrets.
+.git
+.venv
+data
+samples
+tests
+eval
+docs
+.env
+.env.*
+**/__pycache__
+*.parquet
+*.duckdb
+*.tar.gz
+.pytest_cache
+.ruff_cache

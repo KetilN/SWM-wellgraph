@@ -1,0 +1,149 @@
+# Evaluation questions: knowledge graph (through the MCP tools) versus plain search over
+# the report text.
+#
+# Each question has:
+#   category   lookup | depth_join | spatial | multi_hop | aggregation | events | absence
+#   needs      backbone  answerable from SODIR tables alone
+#              events    needs drilling events extracted from the reports
+#   kg         the tool call that answers it, and how the answer is read from the result
+#   expect     reference answer. For backbone questions it was computed from the SODIR
+#              tables on 2026-11-19, so a pass there shows the tools return what the
+#              source says; it is a consistency check, not an independent measurement.
+#              For event questions it is null until a person has labelled the answer from
+#              the reports. Do not fill those from the graph's own output.
+#   search     why plain search over report pages struggles, in one line
+#
+# Wells are from the sample set (25/6-1, 25/6-3, 25/7-2, 25/7-3, 6/3-1, 6507/7-9).
+# Replace them with wells from the demo area once it is chosen.
+#
+# Run:  PYTHONPATH=src uv run python -m wellgraph.evaluation --kg data/kg
+
+version: 1
+
+questions:
+
+  - id: q01_lookup
+    category: lookup
+    needs: backbone
+    question: Who drilled wellbore 25/7-2, with which rig, when was it completed and how deep is it?
+    search: Control question. One report states all of this; search should do well.
+    kg:
+      tool: get_well_summary
+      args: {wellbore: "25/7-2"}
+      answer: wellbore_fields
+      fields: [operator, drilling_facility, completion_date, total_depth_md]
+    expect:
+      operator: Conoco Norway Inc.
+      drilling_facility: DYVI STENA
+      completion_date: "1990-07-18"
+      total_depth_md: 4850.0
+
+  - id: q02_depth_join
+    category: depth_join
+    needs: backbone
+    question: In wellbore 25/7-2, which formation is at 3000 m measured depth, and what hole size was that depth drilled in?
+    search: Needs two tables read together; the report gives tops and casing points on different pages.
+    kg:
+      tool: get_well_summary
+      args: {wellbore: "25/7-2"}
+      answer: formation_and_section_at_depth
+      depth_md: 3000.0
+    expect:
+      formations: [SHETLAND GP, KYRRE FM]
+      hole_diameter_in: 12.25
+
+  - id: q03_spatial
+    category: spatial
+    needs: backbone
+    question: Which exploration wellbores lie within 10 km of 25/7-2?
+    search: Distance is not in any report; coordinates of other wells are in other documents.
+    kg:
+      tool: find_wells
+      args: {near_wellbore: "25/7-2", radius_km: 10, wellbore_type: EXPLORATION, limit: 200}
+      answer: result_names
+    expect:
+      names: [25/10-11, 25/10-3, 25/11-23, 25/7-1 S, 25/7-11 S, 25/7-12 A, 25/7-12 S,
+              25/7-13, 25/7-4 S, 25/7-7, 25/7-8 S, 25/7-9 S, 25/8-20 A, 25/8-20 B,
+              25/8-20 C, 25/8-20 S, 25/8-21 S]
+
+  - id: q04_multi_hop
+    category: multi_hop
+    needs: backbone
+    question: Of the wellbores within 15 km of 25/6-1, which penetrate the Shetland Group?
+    search: Two hops (distance, then formation tops) across eight wells' documents.
+    kg:
+      tool: find_wells
+      args: {near_wellbore: "25/6-1", radius_km: 15, formation: Shetland Group, limit: 200}
+      answer: result_names
+    expect:
+      names: [25/5-3, 25/6-2, 25/6-5 S, 25/6-6 S, 25/8-7, 25/9-1, 25/9-3, 25/9-4]
+
+  - id: q05_aggregation
+    category: aggregation
+    needs: backbone
+    question: How many exploration wellbores are within 20 km of 25/7-2?
+    search: A count over 78 wells; no page states it and top-k retrieval cannot cover them.
+    kg:
+      tool: find_wells
+      args: {near_wellbore: "25/7-2", radius_km: 20, wellbore_type: EXPLORATION, limit: 1}
+      answer: total
+    expect:
+      total: 78
+
+  - id: q06_events_one_well
+    category: events
+    needs: events
+    question: What drilling problems were reported in 25/7-2, at what depths, and what was done about each?
+    search: Control question for events. One report holds the answer, spread over many daily-report pages.
+    kg:
+      tool: query_events
+      args: {wellbore: "25/7-2", limit: 200}
+      answer: event_rows
+    expect: null
+
+  - id: q07_events_formation_section
+    category: multi_hop
+    needs: events
+    question: Which wells within 20 km of 25/7-2 had lost circulation in the Shetland Group in the 12 1/4 in section, and at what mud weight?
+    search: Reports rarely name the formation or hole size next to the event; both come from depth joins.
+    kg:
+      tool: query_events
+      args: {event_type: lost_circulation, formation: Shetland Group, hole_size: "12 1/4",
+             near_wellbore: "25/7-2", radius_km: 20, include_reference: true, limit: 200}
+      answer: event_rows
+    expect: null
+
+  - id: q08_events_aggregation
+    category: aggregation
+    needs: events
+    question: Around 25/7-2 (20 km), which hole section has the most reported drilling problems, and of what kind?
+    search: An aggregate over every event in every nearby report.
+    kg:
+      tool: offset_well_analysis
+      args: {near_wellbore: "25/7-2", radius_km: 20}
+      answer: summary_rows
+    expect: null
+
+  - id: q09_events_compare
+    category: multi_hop
+    needs: events
+    question: Compare tight-hole and stuck-pipe events in 25/7-2 and 25/7-3. In which formations did they occur?
+    search: Needs the same kind of event from two reports lined up against two sets of formation tops.
+    kg:
+      tool: query_events
+      args: {event_type: tight_hole, near_wellbore: "25/7-2", radius_km: 15,
+             include_reference: true, limit: 200}
+      answer: event_rows
+    expect: null
+
+  - id: q10_absence
+    category: absence
+    needs: events
+    question: Did any well within 20 km of 25/6-1 report a kick? If so, at what depth and mud weight?
+    search: Search always returns pages; it cannot show that nothing was found across a set of wells.
+    kg:
+      tool: query_events
+      args: {event_type: kick, near_wellbore: "25/6-1", radius_km: 20,
+             include_reference: true, limit: 200}
+      answer: event_rows
+    expect: null

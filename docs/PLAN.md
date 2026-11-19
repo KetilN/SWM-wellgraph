@@ -172,6 +172,10 @@ Done:
 - [x] Extraction pipeline up to the model call: routing, prompt, event model, validation
       against the page, depth joins, response cache, runner. Tested with a fake model.
       Dry run on the 7 samples: 194 of 1,208 pages routed, ~450k input tokens (rough).
+- [x] Evaluation: 10 questions in `eval/questions.yaml` (5 backbone with reference
+      answers, 5 event questions awaiting hand-labelled answers) and a runner
+      (`wellgraph.evaluation`) with a BM25 search baseline.
+- [x] `Dockerfile` for the hosted MCP endpoint (port 7860, graph baked in from a tarball).
 - [ ] **Blocked on a model endpoint** (`WELLGRAPH_LLM_*` in `.env`): no event has been
       extracted by a real model yet, and the runner's HTTP client is untested against one.
 
