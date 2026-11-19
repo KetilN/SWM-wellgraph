@@ -193,6 +193,15 @@ Done:
       served by the tools or used to date events.
 - [x] Web app on the MCP server: NCS map (SODIR quadrants, blocks, fields; Natural Earth
       coastline; all local files), well strip, events, source text.
+- [x] Core data (RealPore, 372,949 samples, 1,238 wellbores, all matched by NPD id):
+      `core_sample` and `poro_perm_fit` tables, `reservoir_quality` MCP tool, depth-profile
+      tracks and a cross-plot in the app. Loaded for the 6 cored wells that have a report
+      (1,640 samples). All-wells load rehearsed: under 1 s, 8.5 MB, 219 fits over 85
+      formations (`python -m wellgraph.onboard.realpore --kg data/kg --all`).
+- [ ] All-wells report run. Measured on 10 reports and scaled to 5,327: about 955,000
+      pages, 190,000 model calls, 477 M input tokens, a page table of about 820 MB.
+      Open: where the JSONs come from (external disk, or Zenodo by byte range), laptop
+      disk space, and model throughput, which has not been measured.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set
