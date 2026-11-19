@@ -1,0 +1,27 @@
+[project]
+name = "eowr-kg"
+version = "0.1.0"
+description = "Knowledge graph over public Norwegian continental shelf end-of-well reports, served to agents via MCP"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "duckdb>=1.1",        # backbone tables, CSV/Parquet loading, geo distance SQL
+    "kuzu>=0.8",          # embedded property graph, Cypher
+    "fastmcp>=2.0",       # MCP server
+    "anthropic>=0.40",    # extraction (cheap model) + demo agent
+    "pydantic>=2.7",      # structured extraction schema
+    "pyyaml>=6.0",        # ontology.yaml
+    "pandas>=2.2",
+    "httpx>=0.27",        # SODIR FactPages downloads
+    "rapidfuzz>=3.9",     # entity resolution (wellbore / formation names)
+    "tqdm>=4.66",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "ipykernel>=6"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
