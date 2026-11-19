@@ -187,7 +187,12 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         (the event is at or near it); 'context_interval' means only the interval being
         drilled is known (context_top_md to context_base_md), so hole size is reliable but
         formations list everything that interval crosses; 'none' means no depth. Say which
-        it is when you report a depth or a formation."""
+        it is when you report a depth or a formation.
+
+        mud_weight_source says where a mud weight comes from: 'report' is stated in the
+        report for the event; 'sodir_mud_table' is the nearest measurement in the public
+        SODIR mud table for that wellbore (within 300 m of the event depth), not a value
+        the report gives for the event. Say which when you quote a mud weight."""
         return guarded(
             store.query_events, event_type=event_type, formation=formation,
             hole_size=hole_size, wellbore=wellbore, near_wellbore=near_wellbore,

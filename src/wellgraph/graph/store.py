@@ -19,6 +19,7 @@ from .schema import (
     DEPTH_REFS,
     EVENT_TYPES,
     MUD_WEIGHT_KINDS,
+    MUD_WEIGHT_SOURCE_DOCS,
     SOURCE_DOI,
     SOURCE_URL,
     TABLES,
@@ -218,6 +219,7 @@ class GraphStore:
             "depth_refs": DEPTH_REFS,
             "depth_bases": DEPTH_BASIS_DOCS,
             "mud_weight_kinds": MUD_WEIGHT_KINDS,
+            "mud_weight_sources": MUD_WEIGHT_SOURCE_DOCS,
             "events_by_type": {r["event_type"]: r["n"] for r in by_type},
             "units": {
                 "depth": (
@@ -415,7 +417,7 @@ class GraphStore:
             f"""
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
                    e.depth_basis, e.context_top_md, e.context_base_md, e.depth_ref,
-                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind, e.mud_weight_source,
                    e.hole_diameter_in, e.formations, e.description,
                    e.remedy, e.lesson, round({distance}, 2) as distance_km,
                    e.document_id, e.page_no, e.confidence
@@ -471,6 +473,9 @@ class GraphStore:
                    min(e.mud_weight_sg) filter (where {static}) as min_mud_weight_sg,
                    max(e.mud_weight_sg) filter (where {static}) as max_mud_weight_sg,
                    max(e.mud_weight_sg) filter (where e.mud_weight_kind = 'ecd') as max_ecd_sg,
+                   count(*) filter (where e.mud_weight_source = 'report') as mud_weights_from_report,
+                   count(*) filter (where e.mud_weight_source = 'sodir_mud_table')
+                       as mud_weights_from_sodir,
                    count(*) filter (where e.depth_basis = 'stated') as events_with_exact_depth,
                    round(min(coalesce(e.top_md, e.context_top_md)), 1) as shallowest_md,
                    round(max(coalesce(e.base_md, e.context_base_md)), 1) as deepest_md,
@@ -501,7 +506,7 @@ class GraphStore:
             """
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
                    e.depth_basis, e.context_top_md, e.context_base_md, e.depth_ref,
-                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind, e.mud_weight_source,
                    e.hole_diameter_in, e.formations, e.text_span, e.page_no, e.confidence,
                    e.document_id, d.title, d.relative_path, d.n_pages,
                    p.summary as page_summary, p.quality as page_quality, p.text as page_text

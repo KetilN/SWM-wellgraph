@@ -242,3 +242,11 @@ def test_evidence_shows_basis_context_and_joins(store):
     ev = store.evidence("ev-6")
     assert ev["depth_basis"] == "context_interval" and ev["context_base_md"] == 2900.0
     assert ev["hole_diameter_in"] == 12.25 and ev["formations"] == ["SHETLAND GP", "TOR FM"]
+
+
+def test_mud_weight_source_is_exposed_and_explained(store):
+    rows = {e["event_id"]: e for e in store.query_events(limit=50)["results"]}
+    assert rows["ev-1"]["mud_weight_source"] == "report" and rows["ev-6"]["mud_weight_source"] is None
+    assert list(store.describe()["mud_weight_sources"]) == ["report", "sodir_mud_table"]
+    losses = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)["summary"][0]
+    assert "mud_weights_from_report" in losses and "mud_weights_from_sodir" in losses

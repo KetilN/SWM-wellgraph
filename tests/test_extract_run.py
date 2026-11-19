@@ -384,3 +384,45 @@ def test_merge_prefers_the_row_with_a_stated_depth():
     b = {**row("b", 2622.0, 0.5), "depth_basis": "stated", "context_top_md": None}
     c = {**row("c", None, 0.9), "depth_basis": "context_interval", "context_top_md": 2400.0}
     assert sorted(r["event_id"] for r in merge_duplicates([a, b, c])) == ["b", "c"]
+
+
+# --- mud weight from the SODIR mud table ---------------------------------------------
+
+@pytest.fixture
+def kg_mud(kg):
+    con = duckdb.connect()
+    con.execute("create table mud_check (wellbore_id BIGINT, md DOUBLE, mud_weight_sg DOUBLE, "
+                "viscosity_mpas DOUBLE, yield_point_pa DOUBLE, mud_type VARCHAR, date_measured DATE)")
+    con.execute("insert into mud_check (wellbore_id, md, mud_weight_sg) values "
+                "(1, 2450.0, 1.42), (1, 2300.0, 1.58)")
+    con.execute(f"copy mud_check to '{kg}/mud_check.parquet' (format parquet)")
+    con.close()
+    return kg
+
+
+def test_missing_mud_weight_is_filled_from_sodir_and_labelled(kg_mud, tmp_path):
+    client = FakeClient({"Lost returns": {"events": [
+        event(mud_weight_sg=None, mud_weight_raw=None, mud_weight_kind=None)]}})
+    stats = run(kg_mud, client, tmp_path)
+    assert stats["mud_weights_from_sodir"] == 1
+    (e,) = GraphStore(kg_mud).query_events(event_type="lost_circulation")["results"]
+    assert e["mud_weight_sg"] == 1.42 and e["mud_weight_source"] == "sodir_mud_table"
+    assert e["mud_weight_raw"] is None and e["mud_weight_kind"] == "mud_in_hole"
+
+
+def test_a_mud_weight_from_the_report_is_never_overwritten(kg_mud, tmp_path):
+    stats = run(kg_mud, FakeClient({"Lost returns": {"events": [event()]}}), tmp_path)
+    assert stats["mud_weights_from_sodir"] == 0
+    (e,) = GraphStore(kg_mud).query_events(event_type="lost_circulation")["results"]
+    assert e["mud_weight_sg"] == 1.45 and e["mud_weight_source"] == "report"
+
+
+def test_tvd_events_and_events_without_depth_are_not_filled(kg_mud, tmp_path):
+    client = FakeClient({"Took a kick": {"events": [event(
+        event_type="kick", top_md=2300.0, base_md=2300.0, depth_ref="TVD",
+        mud_weight_sg=None, mud_weight_raw=None, mud_weight_kind=None,
+        text_span="Took a kick at 2300 m TVD while drilling, 2 m3 gain.")]}})
+    stats = run(kg_mud, client, tmp_path)
+    assert stats["mud_weights_from_sodir"] == 0
+    (e,) = GraphStore(kg_mud).query_events(event_type="kick")["results"]
+    assert e["mud_weight_sg"] is None and e["mud_weight_source"] is None

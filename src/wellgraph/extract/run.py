@@ -41,8 +41,9 @@ from pydantic import ValidationError
 from wellgraph.extract.models import PageExtraction, to_event_row, validate_against_page
 from wellgraph.extract.prompt import SYSTEM_PROMPT, build_messages, json_schema
 from wellgraph.extract.routing import score_page
-from wellgraph.graph.schema import TABLES
-from wellgraph.resolve.depth import joins_for_event
+from wellgraph.graph.schema import EXTRA_TABLES, TABLES
+from wellgraph.resolve.depth import MD_DEPTH_REFS, joins_for_event
+from wellgraph.resolve.mud import mud_weight_at
 
 log = logging.getLogger(__name__)
 
@@ -243,7 +244,8 @@ def _read(con: duckdb.DuckDBPyConnection, kg_dir: Path, table: str) -> None:
         escaped = str(path).replace("'", "''")
         con.execute(f"create view {table} as select * from read_parquet('{escaped}')")
     else:
-        cols = ", ".join(f"{c} {t}" for c, t in TABLES[table].items())
+        columns = TABLES.get(table) or EXTRA_TABLES[table]
+        cols = ", ".join(f"{c} {t}" for c, t in columns.items())
         con.execute(f"create table {table} ({cols})")
 
 
@@ -263,7 +265,7 @@ def extract_events(
 ) -> dict[str, Any]:
     kg_dir = Path(kg_dir)
     con = duckdb.connect()
-    for table in ("wellbore", "document", "page", "hole_section", "formation_top"):
+    for table in ("wellbore", "document", "page", "hole_section", "formation_top", "mud_check"):
         _read(con, kg_dir, table)
 
     where, params = "", []
@@ -283,7 +285,7 @@ def extract_events(
         "documents": len(documents), "pages_total": 0, "pages_sent": 0, "pages_failed": 0,
         "cache_hits": 0, "model_calls": 0, "events_written": 0, "events_dropped": 0,
         "drop_reasons": Counter(), "estimated_input_tokens": 0, "warnings": 0,
-        "context_depths_discarded": 0,
+        "context_depths_discarded": 0, "mud_weights_from_sodir": 0,
     }
     rows: dict[str, dict[str, Any]] = {}
     fixed_tokens = (len(SYSTEM_PROMPT) + len(json.dumps(schema))) // 4
@@ -331,7 +333,7 @@ def extract_events(
                 cache.put(client.model, job[2], reply)
 
         # 3. Validate, depth-join and collect rows.
-        joins: dict[int, tuple[list, list]] = {}
+        joins: dict[int, tuple[list, list, list]] = {}
         for doc, page_no, text in jobs:
             reply = cache.get(client.model, text)
             if reply is None:
@@ -348,8 +350,10 @@ def extract_events(
                 joins[wid] = (
                     _dicts(con.execute("select * from hole_section where wellbore_id = ?", [wid])),
                     _dicts(con.execute("select * from formation_top where wellbore_id = ?", [wid])),
+                    _dicts(con.execute(
+                        "select md, mud_weight_sg from mud_check where wellbore_id = ?", [wid])),
                 )
-            sections, tops = joins[wid]
+            sections, tops, mud_checks = joins[wid]
             for event in extraction.events:
                 if _TIME_BREAKDOWN_ROW.match(event.text_span):
                     stats["events_dropped"] += 1
@@ -374,6 +378,13 @@ def extract_events(
                 if hole is None and event.resolved_depth_ref in (None, "MD", "ASSUMED_MD"):
                     hole = event.stated_hole_diameter_in  # the page's own section heading
                 row = to_event_row(event, wid, doc["document_id"], page_no, hole, formations)
+                if row["mud_weight_sg"] is None and event.resolved_depth_ref in MD_DEPTH_REFS:
+                    # the report gives none: use SODIR's nearest measurement, and say so
+                    found = mud_weight_at(mud_checks, base if base is not None else top)
+                    if found:
+                        row.update(mud_weight_sg=found[0], mud_weight_kind="mud_in_hole",
+                                   mud_weight_source="sodir_mud_table")
+                        stats["mud_weights_from_sodir"] += 1
                 rows[row["event_id"]] = row
 
     stats["drop_reasons"] = dict(stats["drop_reasons"])

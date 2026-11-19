@@ -63,6 +63,7 @@ EVENT_TYPE_DOCS: dict[str, str] = dict(SPEC["enums"]["event_types"])
 DEPTH_REF_DOCS: dict[str, str] = dict(SPEC["enums"]["depth_refs"])
 MUD_WEIGHT_KIND_DOCS: dict[str, str] = dict(SPEC["enums"]["mud_weight_kinds"])
 DEPTH_BASIS_DOCS: dict[str, str] = dict(SPEC["enums"]["depth_bases"])
+MUD_WEIGHT_SOURCE_DOCS: dict[str, str] = dict(SPEC["enums"]["mud_weight_sources"])
 
 EVENT_TYPES: list[str] = list(EVENT_TYPE_DOCS)
 DEPTH_REFS: list[str] = list(DEPTH_REF_DOCS)

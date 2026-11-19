@@ -360,6 +360,7 @@ def to_event_row(
         "depth_ref": event.resolved_depth_ref,
         "mud_weight_raw": event.mud_weight_raw,
         "mud_weight_kind": event.resolved_mud_weight_kind,
+        "mud_weight_source": "report" if event.resolved_mud_weight_sg is not None else None,
         "depth_basis": event.resolved_depth_basis,
         "context_top_md": event.context_top_md,
         "context_base_md": event.context_base_md,
