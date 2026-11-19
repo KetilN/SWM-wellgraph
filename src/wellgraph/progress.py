@@ -25,10 +25,11 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_FILE = Path("data/staging/progress.json")
-STAGES = ["backbone", "documents", "extract", "depth_pass", "daily_reports", "core", "done"]
+STAGES = ["backbone", "documents", "route", "extract", "depth_pass", "daily_reports", "core", "done"]
 LABELS = {
     "backbone": "Backbone tables (SODIR)",
     "documents": "Read reports",
+    "route": "Route pages (which go to the model)",
     "extract": "Extract drilling events (model calls)",
     "depth_pass": "Second depth pass (model calls)",
     "daily_reports": "Daily reports",

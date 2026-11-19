@@ -247,7 +247,10 @@ def _read(con: duckdb.DuckDBPyConnection, kg_dir: Path, table: str) -> None:
     path = kg_dir / f"{table}.parquet"
     if path.is_file():
         escaped = str(path).replace("'", "''")
-        con.execute(f"create view {table} as select * from read_parquet('{escaped}')")
+        # The page table is read once per report and once per event: keep it in memory,
+        # a view would decompress part of the Parquet file on every one of those reads.
+        kind = "table" if table == "page" else "view"
+        con.execute(f"create {kind} {table} as select * from read_parquet('{escaped}')")
     else:
         columns = TABLES.get(table) or EXTRA_TABLES[table]
         cols = ", ".join(f"{c} {t}" for c, t in columns.items())
@@ -297,7 +300,8 @@ def extract_events(
 
     # 1. Route: which pages go to the model.
     jobs: list[tuple[dict[str, Any], int, str]] = []  # (document, page_no, text)
-    for doc in documents:
+    for index, doc in enumerate(documents):
+        progress.report("route", index, len(documents))
         pages = _dicts(con.execute(
             "select page_no, text, summary from page where document_id = ? order by page_no",
             [doc["document_id"]],
@@ -310,6 +314,7 @@ def extract_events(
             sent = sorted(sent[:max_pages_per_report], key=lambda rp: rp[1]["page_no"])
         for _, page in sent:
             jobs.append((doc, page["page_no"], (page["text"] or "")[:MAX_PAGE_CHARS]))
+    progress.report("route", len(documents), len(documents), force=True)
     stats["pages_sent"] = len(jobs)
     stats["estimated_input_tokens"] = sum(fixed_tokens + len(t) // 4 for _, _, t in jobs)
 
