@@ -14,6 +14,7 @@ environment variables (put them in .env, never in the repository):
     WELLGRAPH_LLM_BASE_URL   e.g. https://<resource>.openai.azure.com/openai/v1
     WELLGRAPH_LLM_API_KEY
     WELLGRAPH_LLM_MODEL      model or deployment name
+    WELLGRAPH_LLM_EXTRA_HEADERS   optional JSON object of extra request headers
 
 Every model reply is cached on disk, keyed by model, prompt and page text, so a rerun
 after a network failure costs nothing for pages already done.
@@ -28,6 +29,7 @@ import logging
 import os
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -59,14 +61,20 @@ class LLMClient(Protocol):
 class OpenAICompatibleClient:
     """Chat-completions client for any OpenAI-compatible endpoint (Azure Foundry included)."""
 
+    RETRYABLE = (429, 500, 502, 503, 504)
+
     def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 120.0,
-                 retries: int = 4):
+                 retries: int = 5, extra_headers: dict[str, str] | None = None,
+                 transport: httpx.BaseTransport | None = None, sleep=time.sleep):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.retries = retries
+        self._sleep = sleep
         self._http = httpx.Client(
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}", "api-key": api_key},
+            transport=transport,
+            headers={"Authorization": f"Bearer {api_key}", "api-key": api_key,
+                     **(extra_headers or {})},
         )
 
     @classmethod
@@ -75,8 +83,13 @@ class OpenAICompatibleClient:
                                "WELLGRAPH_LLM_MODEL") if not os.environ.get(v)]
         if missing:
             raise RuntimeError(f"Set {', '.join(missing)} (see .env.example).")
+        extra = os.environ.get("WELLGRAPH_LLM_EXTRA_HEADERS")
+        try:
+            headers = json.loads(extra) if extra else None
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("WELLGRAPH_LLM_EXTRA_HEADERS must be a JSON object.") from exc
         return cls(os.environ["WELLGRAPH_LLM_BASE_URL"], os.environ["WELLGRAPH_LLM_API_KEY"],
-                   os.environ["WELLGRAPH_LLM_MODEL"])
+                   os.environ["WELLGRAPH_LLM_MODEL"], extra_headers=headers)
 
     def complete(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
         body = {
@@ -87,21 +100,27 @@ class OpenAICompatibleClient:
                 "json_schema": {"name": "page_extraction", "schema": schema, "strict": True},
             },
         }
-        last: Exception | None = None
+        last: str = ""
         for attempt in range(self.retries):
+            wait = float(min(2 ** attempt, 30))
             try:
                 response = self._http.post(f"{self.base_url}/chat/completions", json=body)
-                if response.status_code in (429, 500, 502, 503, 504):
-                    raise httpx.HTTPStatusError("retryable", request=response.request,
-                                                response=response)
-                response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"]
-            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-                last = exc
-                status = getattr(getattr(exc, "response", None), "status_code", None)
-                if status is not None and status not in (429, 500, 502, 503, 504):
-                    raise
-                time.sleep(min(2 ** attempt, 20))
+            except httpx.TransportError as exc:  # dropped connection, timeout
+                last = repr(exc)
+            else:
+                if response.status_code not in self.RETRYABLE:
+                    response.raise_for_status()  # other 4xx: a retry will not help
+                    content = response.json()["choices"][0]["message"]["content"]
+                    if not content:
+                        raise RuntimeError(f"Model {self.model} returned an empty reply.")
+                    return content
+                last = f"HTTP {response.status_code}"
+                try:  # honour the server's own back-off when it gives one
+                    wait = min(float(response.headers.get("Retry-After", wait)), 60.0)
+                except ValueError:
+                    pass
+            if attempt < self.retries - 1:
+                self._sleep(wait)
         raise RuntimeError(f"Model call failed after {self.retries} attempts: {last}")
 
 
@@ -161,6 +180,7 @@ def extract_events(
     max_pages_per_report: int | None = None,
     wellbores: list[str] | None = None,
     dry_run: bool = False,
+    workers: int = 1,
 ) -> dict[str, Any]:
     kg_dir = Path(kg_dir)
     con = duckdb.connect()
@@ -188,6 +208,8 @@ def extract_events(
     rows: dict[str, dict[str, Any]] = {}
     fixed_tokens = (len(SYSTEM_PROMPT) + len(json.dumps(schema))) // 4
 
+    # 1. Route: which pages go to the model.
+    jobs: list[tuple[dict[str, Any], int, str]] = []  # (document, page_no, text)
     for doc in documents:
         pages = _dicts(con.execute(
             "select page_no, text, summary from page where document_id = ? order by page_no",
@@ -199,34 +221,55 @@ def extract_events(
         if max_pages_per_report is not None:
             sent = sorted(sent, key=lambda rp: (-rp[0].score, rp[1]["page_no"]))
             sent = sorted(sent[:max_pages_per_report], key=lambda rp: rp[1]["page_no"])
-        stats["pages_sent"] += len(sent)
-        stats["estimated_input_tokens"] += sum(
-            fixed_tokens + min(len(p["text"] or ""), MAX_PAGE_CHARS) // 4 for _, p in sent
-        )
-        if dry_run or not sent:
-            continue
-
-        wid = [doc["wellbore_id"]]
-        sections = _dicts(con.execute("select * from hole_section where wellbore_id = ?", wid))
-        tops = _dicts(con.execute("select * from formation_top where wellbore_id = ?", wid))
-
         for _, page in sent:
-            text = (page["text"] or "")[:MAX_PAGE_CHARS]
+            jobs.append((doc, page["page_no"], (page["text"] or "")[:MAX_PAGE_CHARS]))
+    stats["pages_sent"] = len(jobs)
+    stats["estimated_input_tokens"] = sum(fixed_tokens + len(t) // 4 for _, _, t in jobs)
+
+    if not dry_run:
+        # 2. Call the model for pages not answered before. A page whose call fails after
+        #    retries is counted and skipped; the next run picks it up from where this left.
+        todo = [job for job in jobs if cache.get(client.model, job[2]) is None]
+        stats["cache_hits"] = len(jobs) - len(todo)
+
+        def call(job):
+            doc, page_no, text = job
+            return client.complete(build_messages(text, doc["wellbore"], page_no), schema)
+
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = [(job, pool.submit(call, job)) for job in todo]
+            for job, future in futures:
+                try:
+                    reply = future.result()
+                except (RuntimeError, httpx.HTTPError, KeyError, ValueError) as exc:
+                    # one bad page must not lose the others
+                    stats["pages_failed"] += 1
+                    log.warning("%s page %s: model call failed (%s)", job[0]["wellbore"],
+                                job[1], exc)
+                    continue
+                stats["model_calls"] += 1
+                cache.put(client.model, job[2], reply)
+
+        # 3. Validate, depth-join and collect rows.
+        joins: dict[int, tuple[list, list]] = {}
+        for doc, page_no, text in jobs:
             reply = cache.get(client.model, text)
             if reply is None:
-                messages = build_messages(text, doc["wellbore"], page["page_no"])
-                reply = client.complete(messages, schema)
-                stats["model_calls"] += 1
-                cache.put(client.model, text, reply)
-            else:
-                stats["cache_hits"] += 1
+                continue
             try:
                 extraction = PageExtraction.model_validate_json(reply)
             except ValidationError as exc:
                 stats["pages_failed"] += 1
                 log.warning("%s page %s: invalid model output (%s)", doc["wellbore"],
-                            page["page_no"], str(exc).splitlines()[0])
+                            page_no, str(exc).splitlines()[0])
                 continue
+            wid = doc["wellbore_id"]
+            if wid not in joins:
+                joins[wid] = (
+                    _dicts(con.execute("select * from hole_section where wellbore_id = ?", [wid])),
+                    _dicts(con.execute("select * from formation_top where wellbore_id = ?", [wid])),
+                )
+            sections, tops = joins[wid]
             for event in extraction.events:
                 problems = validate_against_page(event, text)
                 fatal = [p for p in problems if p.startswith(FATAL_PROBLEMS)]
@@ -238,8 +281,7 @@ def extract_events(
                 hole, formations = joins_for_event(
                     sections, tops, event.top_md, event.base_md, event.resolved_depth_ref
                 )
-                row = to_event_row(event, doc["wellbore_id"], doc["document_id"],
-                                   page["page_no"], hole, formations)
+                row = to_event_row(event, wid, doc["document_id"], page_no, hole, formations)
                 rows[row["event_id"]] = row
 
     stats["drop_reasons"] = dict(stats["drop_reasons"])
@@ -272,13 +314,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache", default="data/cache/extract")
     parser.add_argument("--max-pages", type=int, default=None, help="Cap of pages per report.")
     parser.add_argument("--wellbore", action="append", help="Only this wellbore (repeatable).")
+    parser.add_argument("--workers", type=int, default=4, help="Parallel model calls.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Route pages and estimate cost; no model calls, no output.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     client = None if args.dry_run else OpenAICompatibleClient.from_env()
     stats = extract_events(args.kg, client, args.cache, args.max_pages, args.wellbore,
-                           args.dry_run)
+                           args.dry_run, args.workers)
     print(json.dumps(stats, indent=2))
     return 0
 

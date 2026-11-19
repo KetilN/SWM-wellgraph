@@ -1,9 +1,10 @@
 import json
 
 import duckdb
+import httpx
 import pytest
 
-from wellgraph.extract.run import ResponseCache, extract_events
+from wellgraph.extract.run import OpenAICompatibleClient, ResponseCache, extract_events
 from wellgraph.graph.schema import TABLES
 from wellgraph.graph.store import GraphStore
 
@@ -156,3 +157,91 @@ def test_cache_key_depends_on_model_and_text(tmp_path):
     assert cache.get("m1", "page text") == "reply"
     assert cache.get("m2", "page text") is None and cache.get("m1", "other") is None
     assert ResponseCache(tmp_path).get("m1", "page text") == "reply"  # persisted
+
+
+# --- runner robustness ---------------------------------------------------------------
+
+def test_a_failing_page_is_skipped_and_retried_on_the_next_run(kg, tmp_path):
+    class Flaky(FakeClient):
+        def complete(self, messages, schema):
+            if "Took a kick" in messages[-1]["content"]:
+                raise RuntimeError("Model call failed after 5 attempts: HTTP 429")
+            return super().complete(messages, schema)
+
+    stats = run(kg, Flaky({"Lost returns": {"events": [event()]}}), tmp_path)
+    assert stats["pages_failed"] == 1 and stats["events_written"] == 1
+
+    retry = FakeClient({})
+    stats = run(kg, retry, tmp_path)
+    assert len(retry.calls) == 1 and stats["cache_hits"] == 1  # only the failed page
+
+
+def test_parallel_workers_give_the_same_result(kg, tmp_path):
+    replies = {"Lost returns": {"events": [event()]}}
+    one = run(kg, FakeClient(replies), tmp_path / "a", workers=1)
+    four = run(kg, FakeClient(replies), tmp_path / "b", workers=4)
+    assert one["events_written"] == four["events_written"] == 1
+    assert one["model_calls"] == four["model_calls"] == 2
+
+
+# --- HTTP client ---------------------------------------------------------------------
+
+def reply_json(content):
+    return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+
+def make_client(handler, **kw):
+    waits = []
+    client = OpenAICompatibleClient(
+        "https://llm.test/v1/", "secret", "small-model",
+        transport=httpx.MockTransport(handler), sleep=waits.append, **kw,
+    )
+    return client, waits
+
+
+def test_client_sends_schema_auth_and_extra_headers():
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["headers"] = request.headers
+        seen["body"] = json.loads(request.content)
+        return reply_json('{"events": []}')
+
+    client, _ = make_client(handler, extra_headers={"X-Integration": "demo"})
+    out = client.complete([{"role": "user", "content": "hi"}], {"type": "object"})
+
+    assert out == '{"events": []}'
+    assert seen["url"] == "https://llm.test/v1/chat/completions"
+    assert seen["headers"]["authorization"] == "Bearer secret"
+    assert seen["headers"]["x-integration"] == "demo"
+    fmt = seen["body"]["response_format"]
+    assert fmt["type"] == "json_schema" and fmt["json_schema"]["strict"] is True
+    assert seen["body"]["model"] == "small-model"
+
+
+def test_client_honours_retry_after_then_succeeds():
+    answers = [httpx.Response(429, headers={"Retry-After": "7"}), httpx.Response(503),
+               reply_json("{}")]
+    client, waits = make_client(lambda request: answers.pop(0))
+    assert client.complete([], {}) == "{}"
+    assert waits == [7.0, 2.0]  # server's value first, then exponential back-off
+
+
+def test_client_gives_up_after_retries_and_does_not_retry_client_errors():
+    client, waits = make_client(lambda request: httpx.Response(429), retries=3)
+    with pytest.raises(RuntimeError, match="after 3 attempts: HTTP 429"):
+        client.complete([], {})
+    assert len(waits) == 2
+
+    calls = []
+    client, waits = make_client(lambda request: calls.append(1) or httpx.Response(401))
+    with pytest.raises(httpx.HTTPStatusError):
+        client.complete([], {})
+    assert len(calls) == 1 and waits == []
+
+
+def test_client_treats_an_empty_reply_as_an_error():
+    client, _ = make_client(lambda request: reply_json(""))
+    with pytest.raises(RuntimeError, match="empty reply"):
+        client.complete([], {})
