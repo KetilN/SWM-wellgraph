@@ -760,35 +760,41 @@ function drawMap(origin, radiusKm, nearby, reportWells) {
   wellLayer.clearLayers();
   const circle = L.circle([origin.lat, origin.lon], {radius: radiusKm * 1000, color: css("--ink"), weight: 1.2, dashArray: "4 5", fill: false, interactive: false}).addTo(wellLayer);
   const near = new Set(nearby.map(w => w.name));
+  const withReports = new Set(reportWells.map(w => w.name));
   for (const w of nearby.filter(w => w.lat != null).sort((a, b) => a.events - b.events)) { const has = w.events > 0;
     const m = L.circleMarker([w.lat, w.lon], has ? {radius: 5 + Math.sqrt(w.events) * .7, color: css("--panel"), weight: 1.2, fillColor: css("--accent"), fillOpacity: .95}
       : {radius: 3, stroke: false, fillColor: css("--muted"), fillOpacity: .55}).addTo(wellLayer);
-    m.bindTooltip(`${w.name} · ${fmt(w.distance_km, 1)} km${w.operator ? " · " + w.operator : ""}${has ? ` · ${w.events} events` : ""}`);
-    if (has) { m.on("click", () => openWell(w.name));
+    m.bindTooltip(`${esc(w.name)} · ${fmt(w.distance_km, 1)} km${w.operator ? " · " + esc(w.operator) : ""}${has ? ` · ${w.events} events` : ""}`);
+    if (withReports.has(w.name) || has) m.on("click", () => openWell(w.name));
+    if (has) {
       L.marker([w.lat, w.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(w.name), iconSize: [0, 0], iconAnchor: [-9, 8]})}).addTo(wellLayer); } }
   for (const w of reportWells) { if (near.has(w.name) || w.name === origin.name || w.lat == null) continue;
-    L.circleMarker([w.lat, w.lon], {radius: 5, color: css("--panel"), weight: 1, fillColor: css("--accent"), fillOpacity: .8}).bindTooltip(`${w.name} · ${w.events} events`).on("click", () => openWell(w.name)).addTo(wellLayer); }
-  L.circleMarker([origin.lat, origin.lon], {radius: 7, color: css("--panel"), weight: 2, fillColor: css("--ink"), fillOpacity: 1}).bindTooltip(origin.name).addTo(wellLayer);
+    L.circleMarker([w.lat, w.lon], {radius: 5, color: css("--panel"), weight: 1, fillColor: css(w.events ? "--accent" : "--muted"), fillOpacity: .8}).bindTooltip(`${esc(w.name)} · ${w.events} events`).on("click", () => openWell(w.name)).addTo(wellLayer); }
+  L.circleMarker([origin.lat, origin.lon], {radius: 7, color: css("--panel"), weight: 2, fillColor: css("--ink"), fillOpacity: 1}).bindTooltip(esc(origin.name)).addTo(wellLayer);
   L.marker([origin.lat, origin.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(origin.name), iconSize: [0, 0], iconAnchor: [-11, 8]})}).addTo(wellLayer);
   mapBounds = circle.getBounds(); map.invalidateSize(); map.fitBounds(mapBounds, {padding: [14, 14]});
 }
 async function loadOffsets() {
-  const [near, off, reports] = await Promise.all([api("/api/wells", {near: state.well, radius_km: state.radius, limit: 200}),
-    api("/api/offset", {near: state.well, radius_km: state.radius}), api("/api/report_wells")]);
-  const o = near.origin, R = state.radius, k = Math.cos(o.lat * Math.PI / 180), have = new Set(near.results.map(w => w.name));
+  const {well, radius: R} = state;
+  const [near, off, reports] = await Promise.all([api("/api/wells", {near: well, radius_km: R, limit: 200}),
+    api("/api/offset", {near: well, radius_km: R}), api("/api/report_wells")]);
+  if (state.well !== well || state.radius !== R) return;
+  const o = near.origin, k = Math.cos(o.lat * Math.PI / 180), have = new Set(near.results.map(w => w.name));
   for (const w of reports.results) { if (w.name === o.name || have.has(w.name) || w.lat == null) continue;
     const dist = Math.hypot((w.lon - o.lon) * 111.32 * k, (w.lat - o.lat) * 110.57); if (dist <= R) near.results.push({...w, distance_km: dist}); }
   drawMap(o, R, near.results, reports.results);
-  const withEvents = near.results.filter(w => w.events > 0).length;
-  $("maplegend").textContent = `${near.total} wellbores within ${R} km of ${o.name}; ${withEvents} of them have a report with events loaded (blue, click to open). Grey: backbone only.`;
-  $("nearbytitle").textContent = `What happened in other wells within ${R} km of ${o.name}`;
+  const coverage = off.coverage;
+  $("maplegend").textContent = `${coverage.nearby_wellbores} offset wellbores within ${R} km of ${o.name}. ${coverage.wellbores_with_reports} have loaded reports and ${coverage.wellbores_with_extracted_events} have extracted events (blue).`;
+  $("nearbytitle").textContent = `Extracted events from offset wells within ${R} km of ${o.name}`;
   $("offset").innerHTML = off.summary.length
-    ? `<tr><th>Event</th><th>Hole</th><th class="num">Events</th><th class="num">Wells</th><th class="num">Mud weight, sg</th><th class="num">Depth, m</th><th>Wellbores</th></tr>` +
+    ? `<tr><th>Event</th><th>Hole</th><th class="num">Events</th><th class="num">Wells</th><th class="num">Reported static mud, sg</th><th class="num" title="Includes assumed MD and contextual depths">Depth, m MD</th><th>Wellbores</th></tr>` +
       off.summary.map(r => `<tr><td><span class="dot" style="background:${TYPES[r.event_type]}"></span> ${label(r.event_type)}</td><td>${r.hole_diameter_in ? inches(r.hole_diameter_in) : "–"}</td>
         <td class="num">${r.events}</td><td class="num">${r.wells}</td>
         <td class="num">${r.min_mud_weight_sg == null ? "–" : fmt(r.min_mud_weight_sg, 2) + (r.max_mud_weight_sg > r.min_mud_weight_sg ? "–" + fmt(r.max_mud_weight_sg, 2) : "")}</td>
         <td class="num">${r.shallowest_md == null ? "–" : fmt(r.shallowest_md) + "–" + fmt(r.deepest_md)}</td><td>${r.wellbores.map(esc).join(", ")}</td></tr>`).join("")
-    : `<tr><td class="muted">No events in other wells within ${R} km${off.note ? ": " + esc(off.note) : "."} Try a larger radius.</td></tr>`;
+    : `<tr><td class="muted">${coverage.wellbores_with_reports
+      ? "No matching events were extracted from the available offset reports."
+      : "No offset wellbores in this radius have reports loaded."}</td></tr>`;
 }
 init();
 </script>

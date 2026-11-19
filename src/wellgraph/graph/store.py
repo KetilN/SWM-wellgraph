@@ -812,6 +812,7 @@ class GraphStore:
             well_params.append(origin[2])
         wells = self._rows(
             f"select w.name, round({distance}, 2) as distance_km, "
+            "exists (select 1 from document d where d.wellbore_id = w.wellbore_id) as has_report, "
             f"(select count(*) from event e where e.wellbore_id = w.wellbore_id) as events "
             f"from wb w where {distance} <= ? {exclude} order by distance_km, w.name",
             well_params,
@@ -819,7 +820,8 @@ class GraphStore:
         clause, params, _ = self._event_filter(
             None, formation, hole_size, None, origin, radius, False, None, None
         )
-        static = "coalesce(e.mud_weight_kind, 'unknown') <> 'ecd'"
+        static = "e.mud_weight_kind = 'mud_in_hole' and e.mud_weight_source = 'report'"
+        measured = "e.depth_ref in ('MD', 'ASSUMED_MD')"
         summary = self._rows(
             f"""
             select e.event_type, e.hole_diameter_in,
@@ -831,8 +833,10 @@ class GraphStore:
                    count(*) filter (where e.mud_weight_source = 'sodir_mud_table')
                        as mud_weights_from_sodir,
                    count(*) filter (where e.depth_basis = 'stated') as events_with_exact_depth,
-                   round(min(coalesce(e.top_md, e.context_top_md)), 1) as shallowest_md,
-                   round(max(coalesce(e.base_md, e.context_base_md)), 1) as deepest_md,
+                   round(min(coalesce(e.top_md, e.context_top_md))
+                       filter (where {measured}), 1) as shallowest_md,
+                   round(max(coalesce(e.base_md, e.context_base_md))
+                       filter (where {measured}), 1) as deepest_md,
                    list(distinct w.name order by w.name) as wellbores,
                    list(e.event_id order by e.event_id) as event_ids
             from event e join wb w using (wellbore_id) where {clause}
@@ -844,6 +848,14 @@ class GraphStore:
             "origin": {"lat": origin[0], "lon": origin[1], "wellbore": near_wellbore},
             "radius_km": radius,
             "offset_wells": len(wells),
+            "coverage": {
+                "nearby_wellbores": len(wells),
+                "wellbores_with_reports": sum(w["has_report"] for w in wells),
+                "wellbores_with_extracted_events": sum(w["events"] > 0 for w in wells),
+                "wellbores_with_matching_events": len({
+                    name for row in summary for name in row["wellbores"]
+                }),
+            },
             "wells": wells[:MAX_LIMIT],
             "summary": summary,
             "lessons": self._rows(

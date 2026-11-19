@@ -214,11 +214,13 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         formation: Formation = None,
         hole_size: HoleSize = None,
     ) -> dict[str, Any]:
-        """Aggregate what happened in offset wells around a wellbore or a planned
-        location (lat/lon). Returns the offset wells with distances, then events grouped
-        by event type and hole size with counts, number of wells affected, mud weight
-        range (static mud weight only; max_ecd_sg is reported separately), depth range, the wellbores involved and event_ids, plus recorded lessons
-        learned. Optionally restrict to one formation or hole size."""
+        """Summarise historical events around a wellbore or a planned location (lat/lon).
+        Coverage counts all nearby wellbores, those with reports, those with any extracted
+        events, and those matching the event filters (formation and hole size). A wellbore
+        with a report and no extracted events may have incomplete extraction.
+        Events are grouped by type and hole size, with counts, event IDs for evidence, and
+        recorded lessons. Mud weight ranges use report-derived static mud only. Max ECD is
+        separate. Depth ranges include MD and assumed MD, including contextual depths."""
         return guarded(
             store.offset_analysis, near_wellbore=near_wellbore, lat=lat, lon=lon,
             radius_km=radius_km, formation=formation, hole_size=hole_size,

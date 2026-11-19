@@ -123,6 +123,51 @@ def test_offset_analysis_from_coordinates(store):
     assert out["offset_wells"] == 1  # only 99/1-1 itself is within 5 km of that point
 
 
+def test_offset_coverage_distinguishes_reports_from_matching_events(store):
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=500, hole_size=17.5)
+    assert out["coverage"] == {
+        "nearby_wellbores": 3,
+        "wellbores_with_reports": 2,
+        "wellbores_with_extracted_events": 2,
+        "wellbores_with_matching_events": 1,
+    }
+    assert {w["name"]: w["has_report"] for w in out["wells"]} == {
+        "99/1-2 A": True, "99/1-3": True, "99/2-1": False,
+    }
+
+
+def test_offset_coverage_is_independent_of_the_well_list_limit(store, monkeypatch):
+    monkeypatch.setattr("wellgraph.graph.store.MAX_LIMIT", 1)
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35, hole_size=100)
+    assert len(out["wells"]) == 1
+    assert out["coverage"]["wellbores_with_reports"] == 2
+    assert out["coverage"]["wellbores_with_matching_events"] == 0
+
+
+def test_offset_md_range_excludes_tvd(store):
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)
+    kick = next(row for row in out["summary"] if row["event_type"] == "kick")
+    assert kick["events"] == 1
+    assert kick["shallowest_md"] is None and kick["deepest_md"] is None
+
+
+@pytest.mark.parametrize(("kind", "source"), [
+    ("unknown", "report"), ("mud_in_hole", "sodir_mud_table"),
+])
+def test_offset_static_mud_range_excludes_unknown_and_proxy_values(store, kind, source):
+    store._con.execute(
+        "create or replace temp table alternate_event as select * replace ("
+        "case when event_id = 'ev-2' then ? else mud_weight_kind end as mud_weight_kind, "
+        "case when event_id = 'ev-2' then ? else mud_weight_source end as mud_weight_source) "
+        "from event", [kind, source],
+    )
+    store._con.execute("create or replace temp view event as select * from alternate_event")
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)
+    losses = next(row for row in out["summary"] if row["event_type"] == "lost_circulation")
+    assert losses["min_mud_weight_sg"] is None and losses["max_mud_weight_sg"] is None
+    assert losses["max_ecd_sg"] == 1.52
+
+
 def test_offset_analysis_needs_a_location(store):
     with pytest.raises(ValueError):
         store.offset_analysis(radius_km=10)
