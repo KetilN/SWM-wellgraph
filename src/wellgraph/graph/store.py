@@ -530,13 +530,16 @@ class GraphStore:
                 edge(ev, root, "OCCURRED_IN")
         return {"wellbore": wb["name"], "nodes": list(nodes.values()), "edges": edges}
 
-    def report_graph(self, max_wellbores: int = 60) -> dict[str, Any]:
+    def report_graph(self, max_wellbores: int = 400, detail_limit: int = 25) -> dict[str, Any]:
         """Every wellbore that has a report, in one graph.
 
         Formations, operators and fields are shared nodes, so wells connect through them.
-        Hole sections, reports and events belong to one wellbore each.
+        Hole sections, reports and events belong to one wellbore each. With more than
+        `detail_limit` wells only the wellbores and the shared nodes are returned (an
+        overview); open one wellbore for its sections, reports and events.
         """
         wells = self.report_wells()
+        overview = len(wells) > detail_limit
         nodes: dict[str, dict[str, Any]] = {}
         edges: dict[tuple[str, str, str], dict[str, str]] = {}
         for well in wells[:max_wellbores]:
@@ -550,6 +553,12 @@ class GraphStore:
                     return f"hs:{name}:{node_id[3:]}"
                 return node_id
 
+            if overview:
+                keep = {n["id"] for n in part["nodes"]
+                        if n["kind"] == "Wellbore" or n["kind"] in SHARED_KINDS}
+                part = {"nodes": [n for n in part["nodes"] if n["id"] in keep],
+                        "edges": [e for e in part["edges"]
+                                  if e["source"] in keep and e["target"] in keep]}
             for n in part["nodes"]:
                 nodes.setdefault(remap(n["id"]), {**n, "id": remap(n["id"]), "wellbore": name
                                                   if n["kind"] not in SHARED_KINDS else None})
@@ -557,6 +566,7 @@ class GraphStore:
                 key = (remap(e["source"]), remap(e["target"]), e["relation"])
                 edges.setdefault(key, {"source": key[0], "target": key[1], "relation": key[2]})
         return {"wellbores": len(wells[:max_wellbores]), "total_wellbores": len(wells),
+                "overview": overview,
                 "nodes": list(nodes.values()), "edges": list(edges.values())}
 
     def find_wells(

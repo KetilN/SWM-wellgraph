@@ -143,3 +143,15 @@ def test_graph_without_a_name_joins_all_report_wells_through_shared_nodes(client
     for n in g["nodes"]:
         shared = n["kind"] in {"GeologicalFormation", "Organisation", "Field"}
         assert (n["wellbore"] is None) == shared
+
+
+def test_all_wells_graph_becomes_an_overview_when_there_are_many_wells(kg_dir):
+    from wellgraph.graph.store import GraphStore
+    store = GraphStore(kg_dir)
+    full, overview = store.report_graph(), store.report_graph(detail_limit=1)
+    assert full["overview"] is False and overview["overview"] is True
+    assert overview["wellbores"] == full["wellbores"]
+    kinds = {n["kind"] for n in overview["nodes"]}
+    assert "Wellbore" in kinds and kinds <= {"Wellbore", "GeologicalFormation", "Organisation", "Field"}
+    ids = {n["id"] for n in overview["nodes"]}
+    assert overview["edges"] and all(e["source"] in ids and e["target"] in ids for e in overview["edges"])

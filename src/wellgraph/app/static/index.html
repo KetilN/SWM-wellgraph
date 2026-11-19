@@ -689,7 +689,7 @@ async function loadInstanceGraph() {
   ig.cy.batch(() => { ig.cy.elements().remove(); ig.cy.add([...nodes, ...edges]); });
   ig.locked = null; instanceDetail(null); ig.sizes(); ig.filter(false); ig.layout(true);
   const count = kind => g.nodes.filter(n => n.kind === kind).length;
-  $("instancetitle").textContent = all ? `All ${g.wellbores} wells with reports as one graph` : `${g.wellbore} as a graph`;
+  $("instancetitle").textContent = all ? (g.overview ? `${g.wellbores} wells with reports, joined through formations, operators and fields (open a well for its events)` : `All ${g.wellbores} wells with reports as one graph`) : `${g.wellbore} as a graph`;
   $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in` +
     (all ? "; wells connect through the formations, operators and fields they share" : "") +
     `. Drag any node to move it, scroll to zoom, drag the background to pan. Click a node for details, double-click it to keep only its neighbours` +
