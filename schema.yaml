@@ -1,0 +1,15 @@
+# wellgraph data schema: the tables (Parquet files) that make up the published graph,
+# with their columns, types and units.
+#
+# STATUS: placeholder. Not agreed yet; nothing reads this file.
+#
+# How it relates to ontology.yaml:
+#   ontology.yaml  says WHAT exists (entity and relationship types, OSDU kinds)
+#   schema.yaml    says HOW it is stored (one table per type, columns, types, units, keys)
+#
+# Until this file is filled in, the working contract used by the MCP server lives in
+# src/wellgraph/graph/schema.py (provisional). When this file is agreed, that module
+# should load it so there is one source of truth.
+
+version: 0
+tables: {}

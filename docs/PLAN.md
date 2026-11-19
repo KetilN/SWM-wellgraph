@@ -180,7 +180,9 @@ Next, in order:
 ## Layout
 ```
 data/                     derived files only, git-ignored (factpages/, staging/, kg/)
-ontology.yaml             (on hold)
+ontology.yaml             entity / relationship types (placeholder, on hold)
+schema.yaml               tables, columns, units (placeholder)
+samples/reports/          four report JSONs (25/6, 25/7) for trying the pipeline
 src/wellgraph/
   onboard/      report reader, SODIR + Diskos loaders
   extract/      page routing, LLM client, event schema, cache
@@ -202,7 +204,8 @@ eval/   docs/   tests/
 - How does Ketil's entity list fit: outer ring, or a second scope?
 
 ## Working rules
-- Keep `data/` out of git. Commit small and often.
+- Keep `data/` out of git. Commit small and often. No AI attribution lines in commits
+  or PRs.
 - Prefer a working thin slice over completeness.
 - Propose before acting on stack, dependencies, scaffolding and schema; wait for a yes.
 - Never write to the external source disk.

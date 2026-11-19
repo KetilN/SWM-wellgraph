@@ -1,0 +1,16 @@
+# wellgraph ontology: entity types and relationship types of the knowledge graph.
+#
+# STATUS: placeholder. Not agreed yet; nothing reads this file.
+#
+# Intended content, once agreed:
+#   entities:       one entry per node type, with its OSDU kind
+#                   (e.g. Wellbore -> osdu:wks:master-data--Wellbore:1.0.0)
+#   relationships:  one entry per edge type, with from / to entity
+#
+# Reference for names: official OSDU data definitions
+# (https://community.opengroup.org/osdu/data/data-definitions).
+# The proposal under discussion is in docs/PLAN.md, "Proposed ontology".
+
+version: 0
+entities: {}
+relationships: {}
