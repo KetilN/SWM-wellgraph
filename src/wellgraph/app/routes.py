@@ -129,8 +129,8 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
 
     def graph(request: Request):
         name = _text(request, "name")
-        if not name:
-            raise ValueError("Give a wellbore name: /api/graph?name=15/9-19 A")
+        if not name:  # no name: every wellbore with a report, in one graph
+            return store.report_graph()
         return store.wellbore_graph(name)
 
     def ontology(request: Request):

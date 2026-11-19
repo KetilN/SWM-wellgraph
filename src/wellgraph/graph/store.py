@@ -27,6 +27,7 @@ from .schema import (
 )
 
 MAX_LIMIT = 200
+SHARED_KINDS = {"GeologicalFormation", "Organisation", "Field"}
 MAX_PAGE_TEXT_CHARS = 8000
 DEFAULT_LIMIT = 50
 NO_EVENTS_NOTE = (
@@ -492,6 +493,35 @@ class GraphStore:
             if not linked:
                 edge(ev, root, "OCCURRED_IN")
         return {"wellbore": wb["name"], "nodes": list(nodes.values()), "edges": edges}
+
+    def report_graph(self, max_wellbores: int = 60) -> dict[str, Any]:
+        """Every wellbore that has a report, in one graph.
+
+        Formations, operators and fields are shared nodes, so wells connect through them.
+        Hole sections, reports and events belong to one wellbore each.
+        """
+        wells = self.report_wells()
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: dict[tuple[str, str, str], dict[str, str]] = {}
+        for well in wells[:max_wellbores]:
+            part = self.wellbore_graph(well["name"])
+            name = part["wellbore"]
+
+            def remap(node_id: str, name: str = name) -> str:
+                if node_id == "wb":
+                    return f"wb:{name}"
+                if node_id.startswith("hs:"):
+                    return f"hs:{name}:{node_id[3:]}"
+                return node_id
+
+            for n in part["nodes"]:
+                nodes.setdefault(remap(n["id"]), {**n, "id": remap(n["id"]), "wellbore": name
+                                                  if n["kind"] not in SHARED_KINDS else None})
+            for e in part["edges"]:
+                key = (remap(e["source"]), remap(e["target"]), e["relation"])
+                edges.setdefault(key, {"source": key[0], "target": key[1], "relation": key[2]})
+        return {"wellbores": len(wells[:max_wellbores]), "total_wellbores": len(wells),
+                "nodes": list(nodes.values()), "edges": list(edges.values())}
 
     def find_wells(
         self,

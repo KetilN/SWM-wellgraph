@@ -132,3 +132,14 @@ def test_daily_rows_endpoint_is_empty_but_valid_without_the_table(client):
     d = client.get("/api/daily", params={"name": "99/1-1"}).json()
     assert d == {"wellbore": "99/1-1", "rows": []}
     assert client.get("/api/daily").status_code == 400
+
+
+def test_graph_without_a_name_joins_all_report_wells_through_shared_nodes(client):
+    g = client.get("/api/graph").json()
+    ids = {n["id"] for n in g["nodes"]}
+    assert g["wellbores"] >= 1 and len(ids) == len(g["nodes"])
+    assert all(e["source"] in ids and e["target"] in ids for e in g["edges"])
+    assert not any(n["id"] == "wb" for n in g["nodes"])
+    for n in g["nodes"]:
+        shared = n["kind"] in {"GeologicalFormation", "Organisation", "Field"}
+        assert (n["wellbore"] is None) == shared
