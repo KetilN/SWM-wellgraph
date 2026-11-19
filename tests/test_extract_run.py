@@ -4,7 +4,14 @@ import duckdb
 import httpx
 import pytest
 
-from wellgraph.extract.run import OpenAICompatibleClient, ResponseCache, extract_events
+from wellgraph.extract.models import PageExtraction
+from wellgraph.extract.run import (
+    OfflineClient,
+    OpenAICompatibleClient,
+    ResponseCache,
+    extract_events,
+    merge_duplicates,
+)
 from wellgraph.graph.schema import TABLES
 from wellgraph.graph.store import GraphStore
 
@@ -245,3 +252,61 @@ def test_client_treats_an_empty_reply_as_an_error():
     client, _ = make_client(lambda request: reply_json(""))
     with pytest.raises(RuntimeError, match="empty reply"):
         client.complete([], {})
+
+
+def test_client_unfences_and_re_asks_once_when_the_reply_is_invalid():
+    ev = event()
+    bad = {"events": [{k: v for k, v in ev.items() if k != "text_span"}]}  # no quote
+    answers = [f"```json\n{json.dumps(bad)}\n```", f"```json\n{json.dumps({'events': [ev]})}\n```"]
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return reply_json(answers.pop(0))
+
+    client, _ = make_client(handler)
+    out = client.complete([{"role": "user", "content": "page"}], {})
+
+    assert PageExtraction.model_validate_json(out).events[0].description == ev["description"]
+    assert len(bodies) == 2 and "failed validation" in bodies[1]["messages"][-1]["content"]
+
+
+# --- duplicates and offline rebuild --------------------------------------------------
+
+def row(event_id, top, conf, wellbore_id=1, kind="stuck_pipe", mw=None, quote="q"):
+    return {"event_id": event_id, "wellbore_id": wellbore_id, "event_type": kind,
+            "top_md": top, "base_md": top, "confidence": conf, "mud_weight_sg": mw,
+            "text_span": quote}
+
+
+def test_same_event_on_several_pages_is_merged_keeping_the_best_row():
+    rows = [row("a", 4340.0, 0.6), row("b", 4343.0, 0.9), row("c", 4347.0, 0.7),
+            row("d", 4400.0, 0.5), row("e", 4340.0, 0.9, kind="fishing"),
+            row("f", 4340.0, 0.9, wellbore_id=2)]
+    assert sorted(r["event_id"] for r in merge_duplicates(rows)) == ["b", "d", "e", "f"]
+
+
+def test_events_without_depth_merge_only_on_identical_quote():
+    rows = [row("a", None, 0.5, quote="Stuck  pipe."), row("b", None, 0.8, quote="Stuck pipe."),
+            row("c", None, 0.9, quote="Stuck again.")]
+    assert sorted(r["event_id"] for r in merge_duplicates(rows)) == ["b", "c"]
+
+
+def test_a_chain_of_nearby_depths_does_not_swallow_a_whole_section():
+    # each is within 10 m of the previous, but the group is anchored on its first depth
+    rows = [row(str(i), 1000.0 + 8 * i, 0.5) for i in range(6)]  # 1000 ... 1040
+    assert len(merge_duplicates(rows)) == 3
+
+
+def test_offline_rebuild_uses_only_cached_replies(kg, tmp_path):
+    run(kg, FakeClient({"Lost returns": {"events": [event()]}}), tmp_path)
+    (kg / "event.parquet").unlink()
+    stats = run(kg, OfflineClient("fake-model"), tmp_path)
+    assert stats["model_calls"] == 0 and stats["cache_hits"] == 2
+    assert stats["events_written"] == 1 and (kg / "event.parquet").exists()
+
+
+def test_fenced_reply_already_in_the_cache_is_still_read(kg, tmp_path):
+    fenced = "```json\n" + json.dumps({"events": [event()]}) + "\n```"
+    stats = run(kg, FakeClient({"Lost returns": fenced}), tmp_path)
+    assert stats["events_written"] == 1 and stats["pages_failed"] == 0

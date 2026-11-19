@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from rapidfuzz import fuzz
@@ -101,6 +101,24 @@ class ExtractedEvent(BaseModel):
         ge=0.0, le=1.0, description="0-1: how sure you are this is a real event in this well."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerate_common_slips(cls, data: Any) -> Any:
+        """Repair what models get wrong often, instead of losing the whole page.
+
+        Seen in real replies: `description` left out (the quote says it all), and
+        `confidence` given as a word.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if not str(data.get("description") or "").strip() and data.get("text_span"):
+            data["description"] = data["text_span"]
+        words = {"low": 0.3, "medium": 0.6, "moderate": 0.6, "high": 0.9}
+        if isinstance(data.get("confidence"), str):
+            data["confidence"] = words.get(data["confidence"].strip().lower(), data["confidence"])
+        return data
+
     @field_validator("remedy", "lesson", "mud_weight_raw", mode="after")
     @classmethod
     def _blank_is_none(cls, value: str | None) -> str | None:
@@ -113,7 +131,9 @@ class ExtractedEvent(BaseModel):
         elif self.base_md is None and self.top_md is not None:
             self.base_md = self.top_md
         if self.top_md is not None and self.base_md < self.top_md:
-            raise ValueError(f"base_md {self.base_md} is shallower than top_md {self.top_md}")
+            # Reports give intervals in the direction of travel ("tight at 1121-1110" while
+            # pulling out), so a reversed pair is the same interval, not an error.
+            self.top_md, self.base_md = self.base_md, self.top_md
         return self
 
     # ---- values decided in code, not by the model
@@ -122,7 +142,8 @@ class ExtractedEvent(BaseModel):
     def resolved_mud_weight_sg(self) -> float | None:
         """Mud weight in sg: parsed from mud_weight_raw when it parses, else the model's."""
         parsed = parse_mud_weight(self.mud_weight_raw) if self.mud_weight_raw else None
-        return parsed if parsed is not None else self.mud_weight_sg
+        value = parsed if parsed is not None else self.mud_weight_sg
+        return None if value is None else round(value, 3)
 
     @property
     def resolved_depth_ref(self) -> str | None:

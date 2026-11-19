@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -56,6 +57,55 @@ class LLMClient(Protocol):
 
     def complete(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
         """Return the model's reply as a JSON string matching `schema`."""
+
+
+def _strip_fences(text: str) -> str:
+    text = text.strip()
+    match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL)
+    return match.group(1) if match else text
+
+
+class OfflineClient:
+    """Answers only from the cache; used to rebuild events without calling a model."""
+
+    def __init__(self, model: str):
+        self.model = model
+
+    def complete(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
+        raise RuntimeError("offline: this page has no cached reply")
+
+
+def merge_duplicates(rows: list[dict[str, Any]], window_m: float = 10.0) -> list[dict[str, Any]]:
+    """Collapse the same event told on several pages (daily report, summary, appendix).
+
+    Two rows are the same event when wellbore and type match and their depths lie within
+    `window_m` of each other; rows without a depth only merge on an identical quote. The
+    row kept is the most confident one, then the one with a mud weight, then the longest
+    quote. Its `description` is unchanged; nothing is blended across pages.
+    """
+    def rank(row):
+        return (row["confidence"] or 0.0, row["mud_weight_sg"] is not None,
+                len(row["text_span"] or ""))
+
+    kept: list[dict[str, Any]] = []
+    with_depth = sorted((r for r in rows if r["top_md"] is not None),
+                        key=lambda r: (r["wellbore_id"], r["event_type"], r["top_md"]))
+    for row in with_depth:
+        last = kept[-1] if kept else None
+        if (last and last["wellbore_id"] == row["wellbore_id"]
+                and last["event_type"] == row["event_type"]
+                and last["top_md"] is not None
+                and row["top_md"] - last["_anchor"] <= window_m):
+            if rank(row) > rank(last):
+                kept[-1] = {**row, "_anchor": last["_anchor"]}
+        else:
+            kept.append({**row, "_anchor": row["top_md"]})
+    by_quote: dict[tuple, dict[str, Any]] = {}
+    for row in (r for r in rows if r["top_md"] is None):
+        key = (row["wellbore_id"], row["event_type"], " ".join((row["text_span"] or "").split()))
+        if key not in by_quote or rank(row) > rank(by_quote[key]):
+            by_quote[key] = row
+    return [{k: v for k, v in r.items() if k != "_anchor"} for r in kept] + list(by_quote.values())
 
 
 class OpenAICompatibleClient:
@@ -92,6 +142,23 @@ class OpenAICompatibleClient:
                    os.environ["WELLGRAPH_LLM_MODEL"], extra_headers=headers)
 
     def complete(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
+        """Call the model, unwrap markdown fences, and re-ask once if the reply is invalid.
+
+        Some models behind OpenAI-compatible endpoints (Claude via Copilot) ignore strict
+        json_schema: they fence the JSON or omit required fields.
+        """
+        reply = _strip_fences(self._post(messages, schema))
+        try:
+            PageExtraction.model_validate_json(reply)
+        except ValidationError as exc:
+            repair = [*messages, {"role": "assistant", "content": reply},
+                      {"role": "user", "content": (
+                          f"Your reply failed validation:\n{exc}\nReturn only the corrected "
+                          "JSON object, with every required field present and no markdown.")}]
+            reply = _strip_fences(self._post(repair, schema))
+        return reply
+
+    def _post(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
         body = {
             "model": self.model,
             "messages": messages,
@@ -257,7 +324,7 @@ def extract_events(
             if reply is None:
                 continue
             try:
-                extraction = PageExtraction.model_validate_json(reply)
+                extraction = PageExtraction.model_validate_json(_strip_fences(reply))
             except ValidationError as exc:
                 stats["pages_failed"] += 1
                 log.warning("%s page %s: invalid model output (%s)", doc["wellbore"],
@@ -289,6 +356,10 @@ def extract_events(
         con.close()
         return stats
 
+    extracted = len(rows)
+    rows = {r["event_id"]: r for r in merge_duplicates(list(rows.values()))}
+    stats["events_merged"] = extracted - len(rows)
+
     cols = ", ".join(f"{c} {t}" for c, t in TABLES["event"].items())
     con.execute(f"create table event_out ({cols})")
     if rows:
@@ -315,11 +386,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-pages", type=int, default=None, help="Cap of pages per report.")
     parser.add_argument("--wellbore", action="append", help="Only this wellbore (repeatable).")
     parser.add_argument("--workers", type=int, default=4, help="Parallel model calls.")
+    parser.add_argument("--offline", metavar="MODEL",
+                        help="Rebuild events from cached replies of MODEL; no model calls.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Route pages and estimate cost; no model calls, no output.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    client = None if args.dry_run else OpenAICompatibleClient.from_env()
+    if args.dry_run:
+        client = None
+    elif args.offline:
+        client = OfflineClient(args.offline)
+    else:
+        client = OpenAICompatibleClient.from_env()
     stats = extract_events(args.kg, client, args.cache, args.max_pages, args.wellbore,
                            args.dry_run, args.workers)
     print(json.dumps(stats, indent=2))
