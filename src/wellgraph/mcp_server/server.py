@@ -256,7 +256,12 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         fitted relationship log10(kh in mD) = intercept + slope * porosity in %, with
         its R2 and scatter. Filter by formation, wellbore and rock type. Formation comes
         from the sample depth joined against SODIR tops, so samples from wells without
-        tops are not counted. Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0;
+        tops are not counted. Also returns permeability_methods: how many samples and
+        wellbores use each horizontal-permeability measurement (Klinkenberg-corrected is
+        preferred; air, nitrogen, gas or unspecified are fallbacks) and flagged_wellbores,
+        the wellbores in scope with no Klinkenberg-corrected horizontal permeability. Per
+        formation, kh_klinkenberg and kh_other_method count the samples behind the median.
+        Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0;
         include that acknowledgement when you report these numbers."""
         return guarded(store.reservoir_quality, formation=formation, wellbore=wellbore,
                        lithology=lithology, limit=limit)

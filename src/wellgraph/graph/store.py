@@ -373,6 +373,9 @@ class GraphStore:
                    round(quantile_cont(s.porosity_pct, 0.5), 1) as porosity_p50,
                    round(quantile_cont(s.porosity_pct, 0.9), 1) as porosity_p90,
                    round(quantile_cont(s.kh_md, 0.5), 3) as kh_p50_md,
+                   count(*) filter (where s.kh_method = 'klinkenberg') as kh_klinkenberg,
+                   count(*) filter (where s.kh_md is not null
+                                    and s.kh_method <> 'klinkenberg') as kh_other_method,
                    round(quantile_cont(s.kv_md / nullif(s.kh_md, 0), 0.5), 3) as kv_over_kh_p50,
                    round(min(s.depth_md)) as shallowest_md, round(max(s.depth_md)) as deepest_md
             from core_sample s where {clause}
@@ -389,9 +392,42 @@ class GraphStore:
                 "r2": round(fit["r2"], 2), "residual_sd_log10": round(fit["residual_sd"], 2),
                 "samples": fit["samples"], "wellbores": fit["wellbores"],
             }
+        # Data validation: which measurement the horizontal permeability comes from. Wells
+        # without SODIR tops count here too, so the formation filter applies only when given.
+        scope = " and ".join(where[1:]) or "true"
+        methods = self._rows(
+            f"""
+            select coalesce(s.kh_method, 'none') as method, count(*) as samples,
+                   count(distinct s.wellbore_id) as wellbores
+            from core_sample s where {scope} group by 1 order by samples desc
+            """,
+            params,
+        )
+        flagged = self._rows(
+            f"""
+            select w.name as wellbore, count(*) as samples, count(s.kh_md) as samples_with_kh,
+                   coalesce(string_agg(distinct s.kh_method, ', ' order by s.kh_method), 'none')
+                       as kh_methods,
+                   case when count(s.kh_md) = 0 then 'no horizontal permeability'
+                        else 'no Klinkenberg-corrected horizontal permeability' end as flag
+            from core_sample s join wb w using (wellbore_id) where {scope}
+            group by w.name having count(*) filter (where s.kh_method = 'klinkenberg') = 0
+            order by flag, w.name
+            """,
+            params,
+        )
         loaded = self._scalar("select count(*) from core_sample")
         return {
             "count": len(rows), "results": rows,
+            "permeability_methods": {
+                "preferred": "klinkenberg",
+                "rule": "Each sample keeps one horizontal permeability: Klinkenberg-corrected "
+                        "if measured, else air, nitrogen, gas, unspecified. kh_method records "
+                        "which one.",
+                "by_method": methods,
+                "wellbores_without_klinkenberg": len(flagged),
+                "flagged_wellbores": flagged[:limit],
+            },
             "note": None if loaded else "Core data has not been loaded into this graph.",
             "attribution": "Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0 (RealPore).",
         }
