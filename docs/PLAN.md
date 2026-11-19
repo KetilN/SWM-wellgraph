@@ -198,7 +198,18 @@ Done:
       tracks and a cross-plot in the app. Loaded for the 6 cored wells that have a report
       (1,640 samples). All-wells load rehearsed: under 1 s, 8.5 MB, 219 fits over 85
       formations (`python -m wellgraph.onboard.realpore --kg data/kg --all`).
-- [ ] All-wells report run. Measured on 10 reports and scaled to 5,327: about 955,000
+- [x] Run over wells with core data, 2026-11-19: 1,016 reports, 794 wells, 163,842 pages,
+      28,672 pages sent to the model, 23,673 events after merging (some depth 90%, hole
+      section 89%, formation 83%, mud weight 80%), 233,333 core samples, 192 fits. 65
+      minutes at 32 parallel calls (about 7.5 calls per second, claude-haiku-5.5 through
+      the Copilot route). Deployed as image v10. Reports are copied from the external disk
+      to `data/staging/` first: the disk's NTFS mount hangs after a while on this laptop.
+- [x] Document table carries the Diskos metadata CSV fields (`wellgraph.onboard.diskos`).
+- [x] `reservoir_quality` reports which permeability measurement is used and lists wells
+      without Klinkenberg-corrected horizontal permeability.
+- [x] Pipeline progress file and dashboard (`python -m wellgraph.progress --serve 7861`).
+- [ ] All-wells report run (older estimate follows; the 1,016-report run suggests about
+      110,000-185,000 model calls and 4-6 hours for all 5,326 reports). Measured on 10 reports and scaled to 5,327: about 955,000
       pages, 190,000 model calls, 477 M input tokens, a page table of about 820 MB.
       Open: where the JSONs come from (external disk, or Zenodo by byte range), laptop
       disk space, and model throughput, which has not been measured.
