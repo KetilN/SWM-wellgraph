@@ -365,11 +365,17 @@ def test_core_samples_and_cross_plot_points(core_store):
     assert plot["wellbores"] == 3 and plot["porosity_p50"] is not None and plot["kh_p50_md"] is not None
     assert plot["lithologies"] == ["sandstone", "siltstone"]
     assert {row["kh_method"] for row in plot["points"]} == {"klinkenberg", "air"}
+    assert plot["methods"] == [{"method": "air", "pairs": 18}, {"method": "klinkenberg", "pairs": 18}]
+    corrected = core_store.poro_perm("Tor Fm", kh_method="klinkenberg")
+    assert corrected["pairs"] == 18 and corrected["fit"] is None
+    assert {row["kh_method"] for row in corrected["points"]} == {"klinkenberg"}
+    assert corrected["methods"] == plot["methods"]
     assert {row["name"]: row["has_core"] for row in core_store.report_wells()} == {
         "99/1-1": True, "99/1-2 A": True, "99/1-3": True,
     }
     assert core_store.poro_perm("Tor Fm", "siltstone")["pairs"] == 9
     assert core_store.poro_perm("Hod Fm") == {
         "formation": "HOD FM", "lithology": "all", "pairs": 0, "wellbores": 0,
-        "porosity_p50": None, "kh_p50_md": None, "lithologies": [], "points": [], "fit": None,
+        "porosity_p50": None, "kh_p50_md": None, "lithologies": [], "methods": [],
+        "points": [], "fit": None,
     }

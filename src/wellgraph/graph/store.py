@@ -436,7 +436,7 @@ class GraphStore:
         }
 
     def poro_perm(self, formation: str, lithology: str | None = None,
-                  max_points: int = 2000) -> dict[str, Any]:
+                  max_points: int = 2000, *, kh_method: str | None = None) -> dict[str, Any]:
         """Paired porosity / permeability samples of one formation, with the fit if there is one."""
         name = normalise_formation(formation)
         lith = (lithology or "all").strip().lower()
@@ -445,6 +445,14 @@ class GraphStore:
         if lith != "all":
             where.append("lithology = ?")
             params.append(lith)
+        methods = self._rows(
+            "select coalesce(kh_method, 'unrecorded') as method, count(*) as pairs "
+            f"from core_sample where {' and '.join(where)} group by 1 order by pairs desc, method",
+            params,
+        )
+        if kh_method:
+            where.append("coalesce(kh_method, 'unrecorded') = ?")
+            params.append(kh_method.strip().lower())
         clause = " and ".join(where)
         stats = self._rows(
             f"""
@@ -465,11 +473,15 @@ class GraphStore:
             f"using sample reservoir({int(max_points)} rows) repeatable (7)",
             params,
         )
-        fit = self._rows("select * from poro_perm_fit where upper(formation) = ? and lithology = ?",
-                         [name, lith])
+        # Stored fits pool all methods. A method-filtered cohort needs its own fit.
+        fit = [] if kh_method else self._rows(
+            "select * from poro_perm_fit where upper(formation) = ? and lithology = ?",
+            [name, lith],
+        )
         return {
             "formation": name, "lithology": lith, **stats,
             "lithologies": [row["lithology"] for row in lithologies],
+            "methods": methods,
             "points": points, "fit": fit[0] if fit else None,
         }
 

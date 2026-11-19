@@ -94,6 +94,13 @@
   .metric-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
   .metric-grid div { display: grid; gap: 2px; background: var(--soft); padding: 7px 10px; border-radius: 7px; }
   .metric-grid strong { font-size: 19px; }
+  .profile-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 7px 10px; margin: 0 auto 12px; max-width: 970px; }
+  .profile-toolbar label { display: grid; gap: 3px; }
+  .profile-toolbar input { width: 95px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  .profile-toolbar [role=status] { flex-basis: 100%; }
+  .profile-toolbar [role=status]:empty { display: none; }
+  .method-summary { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 4px 0 14px; }
+  .method-summary strong { font-variant-numeric: tabular-nums; }
   .event-mix { margin: 10px 0 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px 12px; }
   .event-mix div { border-left: 2px solid var(--field); padding: 5px 8px; background: var(--soft); }
   .event-mix strong { display: block; }
@@ -208,6 +215,14 @@
     <div id="workspace" class="panel analysis-panel">
       <div class="tabs" id="analysis-tabs" aria-label="Views"></div>
     <div class="view" id="view-strip">
+      <form id="profile-range" class="profile-toolbar" aria-label="Depth window">
+        <label for="profile-from">From (m MD)<input id="profile-from" type="number" min="0" step="any" required></label>
+        <label for="profile-to">To (m MD)<input id="profile-to" type="number" min="0" step="any" required></label>
+        <button type="submit">Apply depth window</button>
+        <button type="button" id="profile-full">Full well</button>
+        <button type="button" id="profile-core">Cored interval</button>
+        <span id="profile-status" class="small muted" role="status"></span>
+      </form>
       <svg id="strip" viewBox="0 0 920 900" role="img" aria-label="Depth chart of the selected wellbore"></svg>
       <p class="small muted legend" id="stratlegend"></p>
       <p class="small muted">Depth is measured along the wellbore. SODIR mud checks and leak-off values use separate symbols.
@@ -219,9 +234,11 @@
       <div class="filters core-filters">
         <label>Formation<select id="ppformation"></select></label>
         <label>Rock type<select id="pplith"><option value="all">All rock types</option></select></label>
+        <label>Permeability method<select id="ppmethod"><option value="">All methods</option></select></label>
         <label class="check"><input id="ppfit" type="checkbox" checked> Show formation fit</label>
       </div>
       <div id="ppstats" class="metric-grid"></div>
+      <p id="ppmethods" class="method-summary small muted" aria-label="Methods represented in the selected formation and rock type"></p>
       <div class="core-grid">
         <div><h4>Porosity–permeability cross-plot</h4><svg id="ppplot" viewBox="0 0 720 455" role="img" aria-label="Core porosity against horizontal permeability"></svg></div>
         <div><h4>Sample distributions</h4><svg id="pphist" viewBox="0 0 360 375" role="img" aria-label="Porosity and horizontal permeability distributions"></svg></div>
@@ -459,6 +476,23 @@ async function init() {
     navigate("reservoir");
   };
   $("radius").onchange = e => { state.radius = +e.target.value; loadOffsets().catch(showError); };
+  $("profile-range").onsubmit = e => {
+    e.preventDefault();
+    const from = $("profile-from").valueAsNumber, to = $("profile-to").valueAsNumber;
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to - from < 1 || to > state.profileLimit) {
+      $("profile-status").textContent = `Enter an MD interval of at least 1 m within 0–${number(state.profileLimit)} m.`;
+      return;
+    }
+    setDepthWindow([from, to]);
+  };
+  $("profile-full").onclick = () => setDepthWindow(null);
+  $("profile-core").onclick = () => {
+    const depths = state.core.map(c => c.depth_md).filter(md => Number.isFinite(md) && md >= 0);
+    if (!depths.length) return;
+    const from = Math.max(0, Math.floor(Math.min(...depths) / 10) * 10 - 10);
+    const to = Math.min(state.profileLimit, Math.ceil(Math.max(...depths) / 10) * 10 + 10);
+    setDepthWindow([from, to]);
+  };
   try {
     const [graph, reportWells, ontology] = await Promise.all([
       api("/api/describe"), api("/api/report_wells"), api("/api/ontology"),
@@ -481,6 +515,7 @@ async function openWell(name, nextSection = "wellbore", nextView) {
   state.selected = null;
   state.off.clear();
   state.filter = null;
+  state.profileWindow = null;
   $("evidence").innerHTML = '<p class="muted small">Select an event to see its report and page.</p>';
   navigate(nextSection, nextView);
   if (nextSection === "wellbore") $("directory").open = false;
@@ -597,6 +632,11 @@ async function select(id) {
 }
 
 // ---- wellbore profile --------------------------------------------------------------
+function setDepthWindow(range) {
+  state.profileWindow = range;
+  renderStrip();
+}
+
 function renderStrip() {
   const d = state.detail, H = 900, top = 62, bottom = 27;
   const shown = visibleEvents().filter(usesMd);
@@ -604,38 +644,53 @@ function renderStrip() {
     ...d.formation_tops.map(f => f.base_md || f.top_md || 0),
     ...d.hole_sections.map(h => h.base_md || h.casing_depth_md || 0),
     ...d.mud_checks.map(c => c.md || 0), ...state.core.map(c => c.depth_md || 0),
-    ...shown.map(e => e.base_md || e.context_base_md || eventDepth(e) || 0), 500);
-  const step = profileDepth > 6000 ? 1000 : profileDepth > 2500 ? 500 : 250;
-  const maxDepth = Math.ceil(profileDepth / step) * step;
-  const y = m => top + (H - top - bottom) * m / maxDepth;
+    ...d.events.filter(usesMd).map(e => e.base_md || e.context_base_md || eventDepth(e) || 0), 500);
+  const fullStep = profileDepth > 6000 ? 1000 : profileDepth > 2500 ? 500 : 250;
+  state.profileLimit = Math.ceil(profileDepth / fullStep) * fullStep;
+  const [from, to] = state.profileWindow || [0, state.profileLimit];
+  const span = to - from, radix = 10 ** Math.floor(Math.log10(span / 8));
+  const step = state.profileWindow ? ([1, 2, 5, 10].find(value => value * radix >= span / 8) || 10) * radix : fullStep;
+  const y = m => top + (H - top - bottom) * (m - from) / span;
+  const inWindow = m => m >= from && m <= to;
+  $("profile-from").value = from;
+  $("profile-to").value = to;
+  $("profile-to").max = state.profileLimit;
+  $("profile-full").disabled = !state.profileWindow;
+  $("profile-core").disabled = !state.core.some(c => Number.isFinite(c.depth_md) && c.depth_md >= 0);
+  $("profile-status").textContent = state.profileWindow ? `Showing ${number(from)}–${number(to)} m MD` : "";
   const tracks = [
     [57, 181, "Strat. group"], [181, 334, "Formation tops"], [334, 434, "Hole / casing"],
     [434, 562, "Mud density (sg)"], [562, 668, "Drilling events"],
     [668, 780, "Core porosity (%)"], [780, 911, "Core kₕ (mD, log)"]
   ];
-  let s = '<text x="12" y="25">m MD</text>';
+  let s = `<defs><clipPath id="profile-clip"><rect x="56" y="${top}" width="856" height="${H - top - bottom}"/></clipPath></defs><text x="12" y="25">m MD</text>`;
   for (const [a, b, title] of tracks) {
     s += `<rect x="${a}" y="8" width="${b - a}" height="${H - bottom - 8}" fill="none" stroke="var(--line)"/>
       <rect x="${a}" y="8" width="${b - a}" height="36" fill="var(--soft)" stroke="var(--line)"/>
       <text x="${(a + b) / 2}" y="30" text-anchor="middle">${title}</text>`;
   }
+  s += '<g clip-path="url(#profile-clip)">';
   const groups = d.formation_tops.filter(f => f.level === "GROUP" && f.top_md != null)
     .sort((a, b) => a.top_md - b.top_md);
   for (const [i, g] of groups.entries()) {
-    const y0 = y(g.top_md), base = g.base_md;
-    const band = base > g.top_md && g.base_md != null;
-    const height = band ? y(base) - y0 : 0;
+    const base = g.base_md;
+    const band = base != null && base > g.top_md;
+    if (g.top_md > to || (band ? base < from : g.top_md < from)) continue;
+    const y0 = y(Math.max(from, g.top_md)), height = band ? y(Math.min(to, base)) - y0 : 0;
     if (band) s += `<rect x="57" y="${y0}" width="124" height="${height}" fill="${i % 2 ? "var(--strata-b)" : "var(--strata-a)"}"><title>${esc(g.formation)} · ${fmt(g.top_md)}–${fmt(base)} m MD</title></rect>`;
     s += `<line x1="57" x2="181" y1="${y0}" y2="${y0}" stroke="var(--grid)"/>`;
     if (!band || height > 14) s += `<text x="62" y="${y0 + 12}">${esc(g.formation.replace(/ GP$/, ""))}</text>`;
   }
-  for (let depth = 0; depth <= maxDepth; depth += step) {
+  s += '</g>';
+  for (let depth = Math.ceil(from / step) * step; depth <= to; depth += step) {
     const yy = y(depth);
     s += `<line x1="51" x2="911" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-opacity=".25"/>
       <text x="49" y="${yy + 4}" text-anchor="end" class="dim">${number(depth)}</text>`;
   }
+  s += '<g clip-path="url(#profile-clip)">';
   let lastTop = -100;
   for (const f of d.formation_tops.filter(f => f.level !== "GROUP" && f.top_md != null && !/NO FORMAL|UNDIFF|NO GROUP/.test(f.formation))) {
+    if (!inWindow(f.top_md)) continue;
     const yy = y(f.top_md);
     s += `<line x1="181" x2="334" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-opacity=".55"><title>${esc(f.formation)} · ${fmt(f.top_md)} m MD</title></line>`;
     if (yy - lastTop >= 13) {
@@ -649,9 +704,11 @@ function renderStrip() {
     const base = h.base_md ?? h.casing_depth_md;
     if (base == null || h.hole_diameter_in == null) continue;
     const half = Math.min(45, Math.max(17, h.hole_diameter_in * 1.35)), mid = 384;
-    if (base > prev) {
-      s += `<rect x="${mid - half}" y="${y(prev)}" width="${2 * half}" height="${y(base) - y(prev)}" fill="var(--soft)" stroke="var(--grid)"><title>${inches(h.hole_diameter_in)} hole · ${fmt(prev)}–${fmt(base)} m MD${h.base_md == null ? " (shoe depth used as base)" : ""}</title></rect>`;
-      if (y(base) - y(prev) > 15) s += `<text x="${mid}" y="${(y(prev) + y(base)) / 2 + 4}" text-anchor="middle">${inches(h.hole_diameter_in)}</text>`;
+    const shownFrom = Math.max(from, prev), shownTo = Math.min(to, base);
+    if (shownTo > shownFrom) {
+      const height = y(shownTo) - y(shownFrom);
+      s += `<rect x="${mid - half}" y="${y(shownFrom)}" width="${2 * half}" height="${height}" fill="var(--soft)" stroke="var(--grid)"><title>${inches(h.hole_diameter_in)} hole · ${fmt(prev)}–${fmt(base)} m MD${h.base_md == null ? " (shoe depth used as base)" : ""}</title></rect>`;
+      if (height > 15) s += `<text x="${mid}" y="${y(shownFrom) + height / 2 + 4}" text-anchor="middle">${inches(h.hole_diameter_in)}</text>`;
     }
     if (h.casing_depth_md != null && h.casing_diameter_in != null) {
       const yy = y(h.casing_depth_md);
@@ -670,7 +727,9 @@ function renderStrip() {
   const mudMin = Math.floor(Math.min(.9, ...mudValues) * 10) / 10;
   const mudMax = Math.ceil(Math.max(2.5, ...mudValues) * 10) / 10;
   const mudX = v => 450 + (v - mudMin) / (mudMax - mudMin) * 96;
+  s += '</g>';
   s += axis([0, 1, 2, 3].map(i => mudMin + i * (mudMax - mudMin) / 3), mudX, v => fmt(v, 1));
+  s += '<g clip-path="url(#profile-clip)">';
   if (checks.length > 1) s += `<polyline fill="none" stroke="var(--signal)" stroke-width="1.25" points="${checks.map(c => `${mudX(c.mud_weight_sg)},${y(c.md)}`).join(" ")}"/>`;
   for (const c of checks) s += `<circle cx="${mudX(c.mud_weight_sg)}" cy="${y(c.md)}" r="2.3" fill="var(--signal)"><title>SODIR mud check · ${fmt(c.mud_weight_sg, 2)} sg · ${fmt(c.md)} m MD</title></circle>`;
   for (const h of leak) {
@@ -696,15 +755,17 @@ function renderStrip() {
   const logMin = Math.min(-2, Math.floor(Math.min(...logValues)));
   const logMax = Math.max(3, Math.ceil(Math.max(...logValues)));
   const phiX = v => 683 + v / phiMax * 82, permX = v => 795 + (v - logMin) / (logMax - logMin) * 100;
+  s += '</g>';
   s += axis([0, phiMax / 2, phiMax], phiX, v => fmt(v));
   s += axis([logMin, Math.round((logMin + logMax) / 2), logMax], permX, v => khLabel(10 ** v));
-  for (const c of core) {
+  s += '<g clip-path="url(#profile-clip)">';
+  for (const c of core.filter(c => inWindow(c.depth_md))) {
     const yy = y(c.depth_md), description = `${fmt(c.depth_md, 1)} m MD · ${esc(c.lithology || "rock type unspecified")}`;
     if (c.porosity_pct != null) s += `<circle cx="${phiX(c.porosity_pct)}" cy="${yy}" r="2" fill="var(--signal)" fill-opacity=".7"><title>${description} · ${fmt(c.porosity_pct, 1)}% porosity</title></circle>`;
     if (c.kh_md > 0) s += `<circle cx="${permX(Math.log10(c.kh_md))}" cy="${yy}" r="2" fill="var(--highlight)" fill-opacity=".65"><title>${description} · kₕ ${khLabel(c.kh_md)} mD${c.kh_method ? " · " + esc(c.kh_method) : ""}</title></circle>`;
   }
   if (!core.length) s += '<text x="789" y="91" text-anchor="middle" class="dim">No core measurements loaded</text>';
-  $("strip").innerHTML = s;
+  $("strip").innerHTML = s + '</g>';
   for (const el of $("strip").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
   $("stratlegend").innerHTML = '<span><i class="sw" style="background:var(--strata-a)"></i>SODIR stratigraphy</span><span>◂ ▸ Casing shoe</span><span>◇ Leak-off value</span><span>▪ Reported static mud</span><span>● Report-stated event</span><span>○ Contextual point</span><span>┆ Contextual interval</span>';
 }
@@ -712,6 +773,10 @@ function renderStrip() {
 // ---- core measurements ------------------------------------------------------------
 const paired = sample => sample.porosity_pct > 0 && sample.kh_md > 0;
 const khLabel = value => value == null ? "–" : Number(value.toPrecision(3)).toString();
+const methodLabel = method => ({
+  klinkenberg: "Klinkenberg-corrected gas", air: "Air", nitrogen: "Nitrogen", gas: "Gas",
+  unspecified: "Unspecified method", unrecorded: "Method unrecorded"
+})[method] || method;
 let formationCatalog, corePlotRequest = 0;
 
 async function initPoroPerm() {
@@ -725,7 +790,11 @@ async function initPoroPerm() {
     formations.innerHTML = formationCatalog.map(row =>
       `<option value="${esc(row.formation)}">${esc(row.formation)} · ${number(row.paired)} pairs</option>`).join("");
     formations.onchange = () => loadPoroPerm(true).catch(showError);
-    $("pplith").onchange = () => loadPoroPerm().catch(showError);
+    $("pplith").onchange = () => {
+      $("ppmethod").value = "";
+      loadPoroPerm().catch(showError);
+    };
+    $("ppmethod").onchange = () => loadPoroPerm().catch(showError);
     $("ppfit").onchange = () => loadPoroPerm().catch(showError);
   }
   const localFormations = new Set(state.core.filter(paired).map(s => s.formation));
@@ -734,7 +803,7 @@ async function initPoroPerm() {
     const local = formationCatalog.find(row => localFormations.has(row.formation));
     if (local) formations.value = local.formation;
   }
-  for (const id of ["ppformation", "pplith", "ppfit"]) $(id).disabled = !formationCatalog.length;
+  for (const id of ["ppformation", "pplith", "ppmethod", "ppfit"]) $(id).disabled = !formationCatalog.length;
   if (formationCatalog.length) await loadPoroPerm($("pplith").dataset.formation !== formations.value);
   else $("ppnote").textContent = "No paired core measurements with a formation are loaded in this snapshot.";
 }
@@ -745,9 +814,10 @@ async function loadPoroPerm(resetLithology = false) {
   if (resetLithology) {
     $("pplith").value = "all";
     $("pplith").disabled = true;
+    $("ppmethod").value = "";
   }
-  const lithology = $("pplith").value;
-  const d = await api("/api/poroperm", {formation, lithology});
+  const lithology = $("pplith").value, khMethod = $("ppmethod").value;
+  const d = await api("/api/poroperm", {formation, lithology, kh_method: khMethod});
   if (request !== corePlotRequest || state.view !== "poroperm") return;
   if (resetLithology) {
     $("pplith").innerHTML = '<option value="all">All rock types</option>' +
@@ -755,13 +825,21 @@ async function loadPoroPerm(resetLithology = false) {
     $("pplith").dataset.formation = formation;
     $("pplith").disabled = false;
   }
+  $("ppmethod").innerHTML = '<option value="">All methods</option>' + d.methods.map(entry =>
+    `<option value="${esc(entry.method)}">${esc(methodLabel(entry.method))} · ${number(entry.pairs)} pairs</option>`).join("");
+  $("ppmethod").value = khMethod;
+  $("ppfit").disabled = Boolean(khMethod);
   const local = state.detail ? state.core.filter(s =>
-    s.formation === d.formation && paired(s) && (lithology === "all" || s.lithology === lithology)) : [];
+    s.formation === d.formation && paired(s) && (lithology === "all" || s.lithology === lithology)
+    && (!khMethod || (s.kh_method || "unrecorded") === khMethod)) : [];
   $("pptitle").textContent = d.formation + " core measurements";
   const metrics = [[number(d.pairs), "Paired plugs"], [number(d.wellbores), "Wellbores"],
     [d.porosity_p50 == null ? "–" : fmt(d.porosity_p50, 1) + " %", "Median porosity"],
     [d.kh_p50_md == null ? "–" : khLabel(d.kh_p50_md) + " mD", "Median horizontal permeability"]];
   $("ppstats").innerHTML = metrics.map(([v, title]) => `<div><strong>${v}</strong><span>${title}</span></div>`).join("");
+  const methodTotal = d.methods.reduce((total, method) => total + method.pairs, 0);
+  $("ppmethods").innerHTML = methodTotal ? '<span>Methods in this formation and rock type</span>' + d.methods.map(m =>
+    `<span>${esc(methodLabel(m.method))} <strong>${pct(m.pairs, methodTotal)}</strong></span>`).join("") : "";
   const fit = $("ppfit").checked && d.fit &&
     [d.fit.slope, d.fit.intercept, d.fit.porosity_p10, d.fit.porosity_p90].every(Number.isFinite) ? d.fit : null;
   renderCoreCharts(d.points, local, fit);
@@ -769,7 +847,8 @@ async function loadPoroPerm(resetLithology = false) {
     (local.length ? `<span><i class="dot" style="background:var(--highlight)"></i>${esc(state.well)} · ${number(local.length)} paired plugs</span>` : "") +
     (fit ? '<span><i class="sw" style="background:var(--fit)"></i>Formation fit</span>' : "");
   const shown = `${number(d.points.length)} of ${number(d.pairs)} formation pairs plotted. Histograms use the plotted samples. Medians use the full filtered cohort.`;
-  const fitText = fit ? ` Fit includes ${number(fit.samples)} paired plugs across ${number(fit.wellbores)} wellbores (R² ${fmt(fit.r2, 2)}). Measurements may use different laboratory methods.`
+  const fitText = khMethod ? " The stored fit pools methods and is hidden for this selection."
+    : fit ? ` Fit includes ${number(fit.samples)} paired plugs across ${number(fit.wellbores)} wellbores (R² ${fmt(fit.r2, 2)}). Measurements may use different laboratory methods.`
     : d.fit && !$("ppfit").checked ? " Formation fit hidden." : " No formation fit is available for this selection.";
   $("ppnote").textContent = shown + fitText;
 }

@@ -171,7 +171,8 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         formation = _text(request, "formation")
         if not formation:
             raise ValueError("Give a formation: /api/poroperm?formation=HUGIN FM")
-        return store.poro_perm(formation, _text(request, "lithology"))
+        return store.poro_perm(formation, _text(request, "lithology"),
+                               kh_method=_text(request, "kh_method"))
 
     def evidence(request: Request):
         event_id = _text(request, "id")
