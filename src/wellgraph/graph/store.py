@@ -540,6 +540,8 @@ class GraphStore:
         """
         wells = self.report_wells()
         overview = len(wells) > detail_limit
+        if overview:
+            return self._overview_graph(wells, max_wellbores)
         nodes: dict[str, dict[str, Any]] = {}
         edges: dict[tuple[str, str, str], dict[str, str]] = {}
         for well in wells[:max_wellbores]:
@@ -553,12 +555,6 @@ class GraphStore:
                     return f"hs:{name}:{node_id[3:]}"
                 return node_id
 
-            if overview:
-                keep = {n["id"] for n in part["nodes"]
-                        if n["kind"] == "Wellbore" or n["kind"] in SHARED_KINDS}
-                part = {"nodes": [n for n in part["nodes"] if n["id"] in keep],
-                        "edges": [e for e in part["edges"]
-                                  if e["source"] in keep and e["target"] in keep]}
             for n in part["nodes"]:
                 nodes.setdefault(remap(n["id"]), {**n, "id": remap(n["id"]), "wellbore": name
                                                   if n["kind"] not in SHARED_KINDS else None})
@@ -568,6 +564,41 @@ class GraphStore:
         return {"wellbores": len(wells[:max_wellbores]), "total_wellbores": len(wells),
                 "overview": overview,
                 "nodes": list(nodes.values()), "edges": list(edges.values())}
+
+    def _overview_graph(self, wells: list[dict[str, Any]], max_wellbores: int) -> dict[str, Any]:
+        """Wellbores joined through operator, field and the groups they penetrate.
+
+        Built from two queries, so it stays fast with thousands of wells. When there are
+        more wells than `max_wellbores`, the ones with most events are kept.
+        """
+        shown = sorted(wells, key=lambda w: (-w["events"], w["name"]))[:max_wellbores]
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, str]] = []
+        for w in shown:
+            wid = f"wb:{w['name']}"
+            nodes[wid] = {"id": wid, "kind": "Wellbore", "label": w["name"], "wellbore": w["name"],
+                          "events": w["events"]}
+            for prefix, kind, relation, value in (
+                ("org", "Organisation", "DRILLED_BY", w["operator"]),
+                ("field", "Field", "IN_FIELD", w["field"]),
+            ):
+                if value:
+                    nodes.setdefault(f"{prefix}:{value}", {"id": f"{prefix}:{value}", "kind": kind,
+                                                           "label": value, "wellbore": None})
+                    edges.append({"source": wid, "target": f"{prefix}:{value}", "relation": relation})
+        names = {w["wellbore_id"]: w["name"] for w in shown}
+        for row in self._rows(
+            "select distinct wellbore_id, formation from formation_top "
+            "where level = 'GROUP' and wellbore_id in (select unnest(?)) order by 1, 2",
+            [list(names)],
+        ):
+            fid = f"fm:{row['formation']}"
+            nodes.setdefault(fid, {"id": fid, "kind": "GeologicalFormation", "label": row["formation"],
+                                   "level": "GROUP", "wellbore": None})
+            edges.append({"source": f"wb:{names[row['wellbore_id']]}", "target": fid,
+                          "relation": "PENETRATES"})
+        return {"wellbores": len(shown), "total_wellbores": len(wells), "overview": True,
+                "nodes": list(nodes.values()), "edges": edges}
 
     def find_wells(
         self,
