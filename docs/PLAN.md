@@ -108,10 +108,15 @@ Do not install or change dependencies without the user's agreement.
 
 ## Layout
 ```
-data/raw/  data/sample/  data/factpages/     (git-ignored)
+data/raw/  data/sample/  data/factpages/  data/kg/     (git-ignored)
 ontology.yaml
-src/onboard/   src/extract/   src/graph/   src/mcp_server/
-eval/   docs/
+src/wellgraph/
+  onboard/      tar index, range fetch, SODIR + Diskos loaders
+  extract/      page routing, LLM client, event schema, cache
+  resolve/      name -> NPD ID, depth -> hole section / formation
+  graph/        Parquet -> graph build, queries
+  mcp_server/   FastMCP tools
+eval/   docs/   tests/
 ```
 
 ## Open questions for the user

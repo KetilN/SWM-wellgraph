@@ -1,0 +1,34 @@
+# Data: never in git (120 GB source, licence attribution lives in README)
+data/
+*.tar
+*.tar.part*
+*.pdf
+*.PDF
+
+# Built graph / database files (build products, regenerate from Parquet)
+*.duckdb
+*.duckdb.wal
+*.kuzu
+*.db
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
