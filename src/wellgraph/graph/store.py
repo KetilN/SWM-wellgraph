@@ -602,7 +602,9 @@ class GraphStore:
             ),
             "event_counts": {r["event_type"]: r["n"] for r in counts},
             "documents": self._rows(
-                "select document_id, title, n_pages from document where wellbore_id = ? "
+                "select document_id, title, n_pages, report_type, delivery_company, "
+                "cast(release_date as varchar) as release_date "
+                "from document where wellbore_id = ? "
                 "order by title",
                 wid,
             ),
@@ -784,6 +786,8 @@ class GraphStore:
                    e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind, e.mud_weight_source,
                    e.hole_diameter_in, e.formations, e.text_span, e.page_no, e.confidence,
                    e.document_id, d.title, d.relative_path, d.n_pages,
+                   d.report_type, d.delivery_company, d.quality_remark,
+                   cast(d.release_date as varchar) as release_date,
                    p.summary as page_summary, p.quality as page_quality, p.text as page_text
             from event e join wb w using (wellbore_id)
             left join document d using (document_id)
@@ -804,6 +808,10 @@ class GraphStore:
             "title": r.pop("title"),
             "path_in_archive": r.pop("relative_path"),
             "n_pages": r.pop("n_pages"),
+            "report_type": r.pop("report_type"),
+            "delivery_company": r.pop("delivery_company"),
+            "release_date": r.pop("release_date"),
+            "quality_remark": r.pop("quality_remark"),
         }
         return {
             **r,

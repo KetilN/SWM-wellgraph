@@ -32,6 +32,7 @@ from wellgraph.extract.daily import build_daily_reports
 from wellgraph.extract.depth_pass import resolve_depths
 from wellgraph.extract.run import LLMClient, OfflineClient, OpenAICompatibleClient, extract_events
 from wellgraph.graph.build import build_documents
+from wellgraph.onboard.diskos import DEFAULT_CSV
 from wellgraph.onboard.realpore import DEFAULT_XLSX, build_core_samples, build_poro_perm_fits
 from wellgraph.onboard.sodir import build_backbone, download_tables
 
@@ -48,6 +49,7 @@ def run_pipeline(
     workers: int = 4,
     core_xlsx: str | Path | None = None,
     core_all_wellbores: bool = False,
+    diskos_csv: str | Path | None = None,
 ) -> dict[str, Any]:
     kg_dir, cache_dir, raw_dir = Path(kg_dir), Path(cache_dir), Path(raw_dir)
     kg_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +67,7 @@ def run_pipeline(
             )
         stats["backbone"] = build_backbone(raw_dir, kg_dir)
 
-    stats["documents"] = build_documents(reports_root, kg_dir)
+    stats["documents"] = build_documents(reports_root, kg_dir, diskos_csv=diskos_csv)
     stats["events"] = extract_events(
         kg_dir, client, cache_dir / "extract", max_pages_per_report, wellbores, False, workers
     )
@@ -96,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="RealPore Excel file; the core step is skipped if it is absent.")
     parser.add_argument("--core-all", action="store_true",
                         help="Load core data for every well, not only wells with a report.")
+    parser.add_argument("--diskos-csv", default=str(DEFAULT_CSV),
+                        help="Diskos metadata CSV; fills report type, company and dates.")
     parser.add_argument("--offline", metavar="MODEL",
                         help="Rebuild from cached replies of MODEL; no model calls.")
     args = parser.parse_args(argv)
@@ -105,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     client = OfflineClient(args.offline) if args.offline else OpenAICompatibleClient.from_env()
     stats = run_pipeline(args.reports, args.kg, client, args.cache, args.raw,
                          args.download_backbone, args.max_pages, args.wellbore, args.workers,
-                         args.core_xlsx, args.core_all)
+                         args.core_xlsx, args.core_all, args.diskos_csv)
     print(json.dumps(stats, indent=2, default=str))
     return 0
 

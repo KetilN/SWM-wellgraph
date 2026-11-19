@@ -67,7 +67,7 @@ tables:
 
   document:
     entity: Document
-    source: Diskos end-of-well reports (report JSON metadata)
+    source: Diskos end-of-well reports (report JSON metadata) and the Diskos metadata CSV published with them
     key: [document_id]
     columns:
       document_id: {type: VARCHAR, description: Diskos wellbore file id}
@@ -75,6 +75,15 @@ tables:
       title: {type: VARCHAR, description: Report title}
       relative_path: {type: VARCHAR, description: Path of the PDF inside the Zenodo archive}
       n_pages: {type: INTEGER, description: Number of pages}
+      report_type: {type: VARCHAR, description: "Diskos info item type, e.g. COMPLETION_REPORT, WELLBORE_DOCUMENTS (metadata CSV)"}
+      description: {type: VARCHAR, description: Diskos description of the report (metadata CSV)}
+      delivery_company: {type: VARCHAR, description: Company that delivered the report to Diskos (metadata CSV)}
+      release_date: {type: DATE, description: Date the report became public (metadata CSV)}
+      created_date: {type: DATE, description: Date the PDF was registered in Diskos (metadata CSV)}
+      data_collection: {type: VARCHAR, description: "Diskos data collection of the PDF, e.g. DISKOS SCANNED COMPLETION REPORTS"}
+      pdf_size_mb: {type: DOUBLE, description: Size of the PDF in megabytes (metadata CSV)}
+      diskos_item_id: {type: VARCHAR, description: DISKOS info item id of the PDF; empty where the CSV value is not a plain number}
+      quality_remark: {type: VARCHAR, description: Quality statement for the OCR text of the report (share of reliable / acceptable / uncertain pages)}
 
   page:
     entity: Page

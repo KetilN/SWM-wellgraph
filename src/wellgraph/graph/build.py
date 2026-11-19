@@ -19,6 +19,7 @@ from typing import Any
 import duckdb
 
 from wellgraph.graph.schema import TABLES
+from wellgraph.onboard.diskos import DISKOS_FIELDS, add_diskos_metadata
 from wellgraph.onboard.reports import iter_reports, write_staging
 
 # Same normalisation as GraphStore: upper-case, no spaces or underscores.
@@ -30,7 +31,10 @@ def _quote(path: Path) -> str:
 
 
 def build_documents(
-    reports_root: str | Path, kg_dir: str | Path, staging_dir: str | Path | None = None
+    reports_root: str | Path,
+    kg_dir: str | Path,
+    staging_dir: str | Path | None = None,
+    diskos_csv: str | Path | None = None,
 ) -> dict[str, Any]:
     kg_dir = Path(kg_dir)
     wellbore = kg_dir / "wellbore.parquet"
@@ -62,7 +66,11 @@ def build_documents(
             left join wb b on b.k = regexp_replace(s.k, 'T[0-9]+$', '') and a.wellbore_id is null
             """
         )
-        doc_cols = ", ".join(f"cast({c} as {t}) as {c}" for c, t in TABLES["document"].items())
+        # Diskos columns start empty; add_diskos_metadata fills them from the metadata CSV.
+        doc_cols = ", ".join(
+            f"cast({'null' if c in DISKOS_FIELDS else c} as {t}) as {c}"
+            for c, t in TABLES["document"].items()
+        )
         con.execute(
             f"copy (select {doc_cols} from resolved where wellbore_id is not null "
             f"order by wellbore_id, document_id) "
@@ -90,12 +98,15 @@ def build_documents(
         ]
         con.close()
 
-    return {
+    result = {
         "reports_read": staged["documents"],
         "documents": documents,
         "pages": pages,
         "unresolved": unresolved,
     }
+    if diskos_csv is not None and Path(diskos_csv).is_file():
+        result["diskos_metadata"] = add_diskos_metadata(kg_dir, diskos_csv)["matched"]
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

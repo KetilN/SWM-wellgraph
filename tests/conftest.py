@@ -7,6 +7,8 @@ far away in another block.
 
 from __future__ import annotations
 
+from datetime import date
+
 import duckdb
 import pytest
 
@@ -44,9 +46,13 @@ HOLE_SECTIONS = [
 ]
 
 DOCUMENTS = [
-    ("doc-1", 1, "COMPLETION_REPORT.PDF", "99_1-1/WELL/99_1-1_COMPLETION_REPORT.PDF", 120),
-    ("doc-2", 2, "COMPLETION_REPORT_1.PDF", "99_1-2_A/WELL/99_1-2_A_COMPLETION_REPORT_1.PDF", 80),
-    ("doc-3", 3, "COMPLETION_REPORT.PDF", "99_1-3/WELL/99_1-3_COMPLETION_REPORT.PDF", 95),
+    ("doc-1", 1, "COMPLETION_REPORT.PDF", "99_1-1/WELL/99_1-1_COMPLETION_REPORT.PDF", 120,
+     "COMPLETION_REPORT", "<99/1-1> completion report", "Statoil", date(1995, 3, 1), date(1990, 1, 2),
+     "DISKOS SCANNED COMPLETION REPORTS", 12.5, "123456", "This document is very good overall."),
+    ("doc-2", 2, "COMPLETION_REPORT_1.PDF", "99_1-2_A/WELL/99_1-2_A_COMPLETION_REPORT_1.PDF", 80,
+     *[None] * 9),
+    ("doc-3", 3, "COMPLETION_REPORT.PDF", "99_1-3/WELL/99_1-3_COMPLETION_REPORT.PDF", 95,
+     *[None] * 9),
 ]
 
 EVENTS = [

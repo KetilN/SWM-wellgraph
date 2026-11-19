@@ -47,7 +47,8 @@ def kg(tmp_path):
         (1, 17.5, 1200.0, "INTERM.", 13.375, 1195.0, 1.55),
         (1, 12.25, 2950.0, "INTERM.", 9.625, 2945.0, 1.78),
     ])
-    write(con, "document", [("doc-1", 1, "REPORT.PDF", "99_1-1/WELL/REPORT.PDF", 3)])
+    write(con, "document", [("doc-1", 1, "REPORT.PDF", "99_1-1/WELL/REPORT.PDF", 3)],
+          list(TABLES["document"])[:5])
     write(con, "page", [
         ("doc-1", 0, QUIET_PAGE, "Table of contents.", "Reliable"),
         ("doc-1", 1, LOSS_PAGE, "Daily drilling report with losses.", "Reliable"),

@@ -89,7 +89,7 @@ def kg(tmp_path):
                            (1, "TOR FM", "FORMATION", "SHETLAND GP", 2400.0, 2550.0),
                            (1, "HOD FM", "FORMATION", "SHETLAND GP", 2550.0, 2900.0)],
          list(TABLES["formation_top"])),
-        ("document", [("d1", 1, "R.PDF", "x", 10)], list(TABLES["document"])),
+        ("document", [("d1", 1, "R.PDF", "x", 10)], list(TABLES["document"])[:5]),
     ]:
         cols = ", ".join(f"{c} {t}" for c, t in TABLES[table].items())
         con.execute(f"create table {table} ({cols})")

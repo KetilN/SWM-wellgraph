@@ -32,7 +32,7 @@ def kg(tmp_path):
           list(TABLES["formation_top"]))
     write(con, "hole_section", [(1, 12.25, 2950.0, "INTERM.", 9.625, 2945.0, 1.78)],
           list(TABLES["hole_section"]))
-    write(con, "document", [("doc-1", 1, "REPORT.PDF", "x.PDF", 2)], list(TABLES["document"]))
+    write(con, "document", [("doc-1", 1, "REPORT.PDF", "x.PDF", 2)], list(TABLES["document"])[:5])
     write(con, "page", [("doc-1", 4, PREVIOUS, "s", "Reliable"), ("doc-1", 5, PAGE, "s", "Reliable")],
           list(TABLES["page"]))
     write(con, "event", [
