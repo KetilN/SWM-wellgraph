@@ -184,13 +184,13 @@ Done:
       context_interval 27, none 14), hole section 92%, formation 85%, mud weight 85%
       (report 61, SODIR table the rest). Leaving out the development well, which has no
       SODIR casing or tops: 96% / 96% / 95% / 94%.
-      Rebuild without model calls, in this order:
-      `python -m wellgraph.extract.run --kg data/kg --offline <model>` then
-      `python -m wellgraph.extract.depth_pass --kg data/kg --offline <model>`.
+      One command builds everything: `python -m wellgraph.pipeline --reports <folder>
+      --kg data/kg` (add `--offline <model>` to rebuild from cached replies).
 - [x] Routing recall measured on 150 not-sent pages: about 97% (docs/routing-recall.md);
       bit-balling and "could not pass" patterns added to the router.
 - [x] Daily-report rows parsed without a model (`wellgraph.extract.daily`, 737 rows from
-      5 of 7 wellbores, docs/daily-reports.md). Table not yet in schema.yaml or served.
+      5 of 7 wellbores, docs/daily-reports.md). In schema.yaml as `daily_report`; not yet
+      served by the tools or used to date events.
 - [x] Web app on the MCP server: NCS map (SODIR quadrants, blocks, fields; Natural Earth
       coastline; all local files), well strip, events, source text.
 

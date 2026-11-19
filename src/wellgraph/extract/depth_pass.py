@@ -19,10 +19,12 @@ import hashlib
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import duckdb
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from rapidfuzz import fuzz
 
@@ -157,7 +159,8 @@ def _ask(client: LLMClient, messages: list[dict[str, str]], schema: dict[str, An
     return client.complete(messages, schema)
 
 
-def resolve_depths(kg_dir: str | Path, client: LLMClient, cache_dir: str | Path) -> dict[str, int]:
+def resolve_depths(kg_dir: str | Path, client: LLMClient, cache_dir: str | Path,
+                   workers: int = 4) -> dict[str, int]:
     kg_dir = Path(kg_dir)
     con = duckdb.connect()
     for table in ("wellbore", "page", "hole_section", "formation_top", "mud_check", "event"):
@@ -173,30 +176,41 @@ def resolve_depths(kg_dir: str | Path, client: LLMClient, cache_dir: str | Path)
              "rejected": 0, "not_found": 0, "failed": 0}
     cache, schema = ResponseCache(cache_dir), _schema()
 
+    # 1. Build one request per event: the event, its page and the pages before it.
+    jobs = []
     for ev in candidates:
         pages = {r["page_no"]: r["text"] or "" for r in _dicts(con.execute(
             "select page_no, text from page where document_id = ? and page_no between ? and ?",
             [ev["document_id"], ev["page_no"] - PREVIOUS_PAGES, ev["page_no"]],
         ))}
-        page_text = pages.get(ev["page_no"], "")
         previous = [pages[n] for n in sorted(pages) if n < ev["page_no"]]
-        messages = build_depth_messages(ev["event_type"], ev["text_span"], page_text, previous,
-                                        ev["wellbore"])
+        messages = build_depth_messages(ev["event_type"], ev["text_span"],
+                                        pages.get(ev["page_no"], ""), previous, ev["wellbore"])
         supplied = messages[-1]["content"]
-        key_text = hashlib.sha256((SYSTEM_PROMPT + supplied).encode("utf-8")).hexdigest()
-        reply = cache.get(client.model, key_text)
-        if reply is None:
+        key = hashlib.sha256((SYSTEM_PROMPT + supplied).encode("utf-8")).hexdigest()
+        jobs.append((ev, messages, supplied, key))
+
+    # 2. Ask the model for those not answered before, a few at a time.
+    todo = [job for job in jobs if cache.get(client.model, job[3]) is None]
+    stats["cache_hits"] = len(jobs) - len(todo)
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [(job, pool.submit(_ask, client, job[1], schema)) for job in todo]
+        for (ev, _, _, key), future in futures:
             try:
-                reply = _ask(client, messages, schema)
-            except (RuntimeError, KeyError, ValueError) as exc:
+                reply = future.result()
+            except (RuntimeError, KeyError, ValueError, httpx.HTTPError) as exc:
                 stats["failed"] += 1
                 log.warning("%s page %s: depth pass call failed (%s)", ev["wellbore"],
                             ev["page_no"], exc)
                 continue
             stats["model_calls"] += 1
-            cache.put(client.model, key_text, reply)
-        else:
-            stats["cache_hits"] += 1
+            cache.put(client.model, key, reply)
+
+    # 3. Check each answer against the text it was given, then apply it.
+    for ev, _, supplied, key in jobs:
+        reply = cache.get(client.model, key)
+        if reply is None:
+            continue
         try:
             answer = DepthContext.model_validate_json(_strip_fences(reply))
         except ValidationError:
@@ -256,10 +270,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kg", default=os.environ.get("WELLGRAPH_KG_DIR", "data/kg"))
     parser.add_argument("--cache", default="data/cache/depth")
     parser.add_argument("--offline", metavar="MODEL", help="Use cached replies of MODEL only.")
+    parser.add_argument("--workers", type=int, default=4, help="Parallel model calls.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     client = OfflineClient(args.offline) if args.offline else OpenAICompatibleClient.from_env()
-    print(json.dumps(resolve_depths(args.kg, client, args.cache), indent=2))
+    print(json.dumps(resolve_depths(args.kg, client, args.cache, args.workers), indent=2))
     return 0
 
 

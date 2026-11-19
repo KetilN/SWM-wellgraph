@@ -107,19 +107,19 @@ entities:
       interval, mud weight, remedy, lesson and a verbatim quote. Each event says how
       exact its depth is (depth_basis: stated, context_point, context_interval, none).
 
+  DailyOperationsReport:
+    ring: core
+    status: populated
+    osdu_kind: master-data--OperationsReport
+    table: daily_report
+    source: daily drilling report tables in the report pages, parsed without a model
+    description: >
+      One dated row of the daily drilling log: date, depth at report time, mud weight when
+      the table has it, and the operations text. Only table layouts are parsed; daily logs
+      written as plain text are not.
+
   # ------------------------------------------------------------------------- observed
   # Present in the end-of-well reports, not extracted yet.
-
-  DailyOperationsReport:
-    ring: observed
-    status: observed
-    osdu_kind: master-data--OperationsReport
-    seen_in: {pages: 124, reports: 7}
-    description: >
-      One dated row or page of the daily drilling log: date, depth at report time, mud
-      weight and the operations text. Most events without their own depth get their
-      context depth from here.
-    would_enable: a time-depth curve per wellbore, and a date and exact depth for every event
 
   ReportSection:
     ring: observed
@@ -452,6 +452,7 @@ relationships:
   DESCRIBES: {from: Document, to: Wellbore, ring: core, stored_as: document.wellbore_id}
   PAGE_OF: {from: Page, to: Document, ring: core, stored_as: page.document_id}
   OCCURRED_IN: {from: DrillingEvent, to: Wellbore, ring: core, stored_as: event.wellbore_id}
+  REPORTS_ON: {from: DailyOperationsReport, to: Wellbore, ring: core, stored_as: daily_report.wellbore_id}
   IN_SECTION:
     from: DrillingEvent
     to: HoleSection
@@ -476,7 +477,6 @@ relationships:
     properties: [text_span, confidence]
 
   # ------------------------------------------------------------------------- observed
-  REPORTS_ON: {from: DailyOperationsReport, to: Wellbore, ring: observed}
   REPORTED_IN: {from: DrillingEvent, to: DailyOperationsReport, ring: observed}
   SECTION_OF_DOCUMENT: {from: ReportSection, to: Document, ring: observed}
   COVERS: {from: ReportSection, to: HoleSection, ring: observed}

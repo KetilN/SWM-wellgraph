@@ -29,20 +29,10 @@ from pathlib import Path
 import duckdb
 
 from wellgraph.extract.units import parse_depth_m, parse_mud_weight
+from wellgraph.graph.schema import EXTRA_TABLES
 
 # Column name -> DuckDB type of data/kg/daily_report.parquet (to be moved into schema.yaml).
-DAILY_REPORT_COLUMNS = {
-    "wellbore_id": "BIGINT",
-    "document_id": "VARCHAR",
-    "page_no": "INTEGER",
-    "row_index": "INTEGER",
-    "report_date": "DATE",
-    "depth_md": "DOUBLE",
-    "start_depth_md": "DOUBLE",
-    "mud_weight_raw": "VARCHAR",
-    "mud_weight_sg": "DOUBLE",
-    "operations": "VARCHAR",
-}
+DAILY_REPORT_COLUMNS = EXTRA_TABLES["daily_report"]  # defined in schema.yaml
 
 YEAR_RANGE = (1965, 2020)  # the wells in the collection were drilled in 1970-2015
 

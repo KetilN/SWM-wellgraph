@@ -94,6 +94,20 @@ The server reads a folder of Parquet files (default `data/kg`, or set
 `WELLGRAPH_KG_DIR`). The tests build a small synthetic graph, so they run without any
 data.
 
+## Build the graph from reports
+
+One command takes a folder of report JSONs to a queryable graph:
+
+```bash
+PYTHONPATH=src uv run python -m wellgraph.pipeline --reports /path/to/reports --kg data/kg --download-backbone
+```
+
+It loads the SODIR backbone (once), links reports to wellbores, extracts events with a
+language model, finds a depth context for events that lack one, and parses daily report
+tables. Model replies are cached, so a rerun only pays for new pages; `--offline <model>`
+rebuilds from the cache with no model calls. The model endpoint is set in `.env` (see
+`.env.example`).
+
 ## Layout
 
 ```

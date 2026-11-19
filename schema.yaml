@@ -141,6 +141,22 @@ extra_tables:
       parent_id: {type: BIGINT, description: Id of the parent unit}
       factpage_url: {type: VARCHAR, description: SODIR FactPages link}
 
+  daily_report:
+    entity: DailyOperationsReport
+    source: daily drilling report tables in the report pages, parsed without a model
+    key: [document_id, page_no, row_index]
+    columns:
+      wellbore_id: {type: BIGINT, description: NPD wellbore id}
+      document_id: {type: VARCHAR, description: Source report}
+      page_no: {type: INTEGER, description: "Source page, 0-based"}
+      row_index: {type: INTEGER, description: Position of the row on the page}
+      report_date: {type: DATE, description: Date of the report row}
+      depth_md: {type: DOUBLE, unit: m, description: "Depth at report time; in some layouts this is bit depth per activity, not hole depth"}
+      start_depth_md: {type: DOUBLE, unit: m, description: Depth at the start of the day, when the layout gives one}
+      mud_weight_raw: {type: VARCHAR, description: Mud weight as written, when the table has that column}
+      mud_weight_sg: {type: DOUBLE, unit: sg, description: Mud weight converted to specific gravity}
+      operations: {type: VARCHAR, description: Operations text of the row}
+
 enums:
 
   event_types:

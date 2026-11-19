@@ -11,7 +11,7 @@ def test_contract_is_loaded_from_schema_yaml():
     assert list(schema.TABLES) == [
         "wellbore", "formation_top", "hole_section", "document", "page", "event",
     ]
-    assert list(schema.EXTRA_TABLES) == ["mud_check", "formation"]
+    assert list(schema.EXTRA_TABLES) == ["mud_check", "formation", "daily_report"]
 
 
 def test_every_column_has_a_valid_type_and_a_description():
