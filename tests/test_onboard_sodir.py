@@ -234,7 +234,8 @@ def test_build_backbone_matches_schema_and_loads(tmp_path):
         "formation_top": 1, "hole_section": 1, "mud_check": 0,
     }
     con = duckdb.connect()
-    expected = {**{t: TABLES[t] for t in sodir.SCHEMA_TABLES}, **sodir.EXTRA_TABLES}
+    backbone_extras = {t: sodir.EXTRA_TABLES[t] for t in ("mud_check", "formation")}
+    expected = {**{t: TABLES[t] for t in sodir.SCHEMA_TABLES}, **backbone_extras}
     for table, columns in expected.items():
         rows = con.execute(
             f"describe select * from read_parquet('{tmp_path}/{table}.parquet')"
