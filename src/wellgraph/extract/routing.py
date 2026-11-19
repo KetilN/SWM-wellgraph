@@ -168,6 +168,11 @@ _EVIDENCE_SPEC: list[tuple[str, str, str, float]] = [
      r"\bhole (?:was |is |very |ledgy |and )*sticky\b|\bsticky (?:hole|spots?|parts?)\b", 1.5),
     ("tight_hole", "tight", r"\btight\b", 1.0),
     ("tight_hole", "reaming", r"\b(?:back)?ream(?:ed|ing)?\b", 0.5),
+    ("tight_hole", "could not pass",
+     (r"\b(?:not able|unable|impossible) to pass\b"
+     r"|\bcould not (?:pass|get past|be worked past)\b"), 3.0),
+    # bit / BHA balling (a recall check on not-sent pages found this was missing)
+    ("other", "bit balling", r"\bball(?:ed|ing)[- ]?up\b|\bbit[- ]?balling\b|\bballing\b", 3.0),
     # wellbore instability
     ("wellbore_instability", "cavings", r"\bcaving\w*", 3.0),
     ("wellbore_instability", "sloughing", r"\bslough\w*", 3.0),

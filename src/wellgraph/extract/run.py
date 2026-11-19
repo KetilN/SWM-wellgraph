@@ -154,15 +154,19 @@ class OpenAICompatibleClient:
         return cls(os.environ["WELLGRAPH_LLM_BASE_URL"], os.environ["WELLGRAPH_LLM_API_KEY"],
                    os.environ["WELLGRAPH_LLM_MODEL"], extra_headers=headers)
 
-    def complete(self, messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
+    def complete(self, messages: list[dict[str, str]], schema: dict[str, Any],
+                 validate=PageExtraction.model_validate_json) -> str:
         """Call the model, unwrap markdown fences, and re-ask once if the reply is invalid.
+
+        `validate` checks a reply against the caller's own model (default: the per-page
+        extraction).
 
         Some models behind OpenAI-compatible endpoints (Claude via Copilot) ignore strict
         json_schema: they fence the JSON or omit required fields.
         """
         reply = _strip_fences(self._post(messages, schema))
         try:
-            PageExtraction.model_validate_json(reply)
+            validate(reply)
         except ValidationError as exc:
             repair = [*messages, {"role": "assistant", "content": reply},
                       {"role": "user", "content": (
