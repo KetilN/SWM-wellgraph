@@ -146,6 +146,15 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
                          for name, r in spec["relationships"].items()]
         return {"entities": entities, "relationships": relationships}
 
+    def daily(request: Request):
+        name = _text(request, "name")
+        if not name:
+            raise ValueError("Give a wellbore name: /api/daily?name=25/7-2")
+        return store.daily_rows(name)
+
+    def matrix(request: Request):
+        return store.event_matrix()
+
     def evidence(request: Request):
         event_id = _text(request, "id")
         if not event_id:
@@ -156,5 +165,6 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/describe": describe, "/api/report_wells": report_wells, "/api/wells": wells,
         "/api/well": well, "/api/events": events, "/api/offset": offset,
         "/api/evidence": evidence, "/api/graph": graph, "/api/ontology": ontology,
+        "/api/daily": daily, "/api/matrix": matrix,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

@@ -7,60 +7,90 @@
 <link rel="stylesheet" href="/static/vendor/leaflet.css">
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --ink: #18202b; --muted: #5d6877; --line: #dde2e8;
-    --accent: #0b6e99; --soft: #eef2f6; --mark: #ffe58a; --mark-ink: #18202b;
+    --bg: #f4f6f8; --panel: #ffffff; --ink: #17202b; --muted: #5a6675; --line: #dbe1e8;
+    --accent: #0b6e99; --soft: #eef2f6; --mark: #ffe58a; --mark-ink: #17202b;
     --sea: #dbe9f1; --land: #ece8dc; --grid: #8fa3b3;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #12161c; --panel: #1b2129; --ink: #e7ecf2; --muted: #9aa6b4; --line: #2c3541;
-            --accent: #5bb8de; --soft: #232b35; --mark: #6b5a12; --mark-ink: #fff6cf;
+    :root { --bg: #11151b; --panel: #1a2028; --ink: #e7ecf2; --muted: #9aa6b4; --line: #2c3541;
+            --accent: #5bb8de; --soft: #222a34; --mark: #6b5a12; --mark-ink: #fff6cf;
             --sea: #16222c; --land: #2b2f2c; --grid: #56697a; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
-           padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
-  header .sub { color: var(--muted); font-size: 12px; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 10px 18px;
+           background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
   label { color: var(--muted); font-size: 12px; margin-right: 4px; }
-  select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
-           border-radius: 6px; padding: 5px 8px; }
-  main { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.15fr) minmax(320px, 1.25fr);
-         gap: 14px; padding: 14px 20px 28px; align-items: start; }
-  @media (max-width: 1100px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
-  h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
-  .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 6px; }
+  select, button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  button { cursor: pointer; }
+  .kpis { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  .kpi { border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; background: var(--soft); min-width: 74px; }
+  .kpi b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 11px; color: var(--muted); }
+
+  .workspace { flex: 1; min-height: 0; display: flex; padding: 12px 14px 14px; gap: 0; }
+  .pane { min-width: 260px; display: flex; flex-direction: column; background: var(--panel);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  #left { flex: 0 0 var(--split, 52%); }
+  #right { flex: 1 1 0; }
+  .workspace.max-left #right, .workspace.max-left .splitter, .workspace.max-right #left, .workspace.max-right .splitter { display: none; }
+  .workspace.max-left #left { flex: 1 1 auto; }
+  .splitter { flex: 0 0 12px; cursor: col-resize; position: relative; touch-action: none; }
+  .splitter::after { content: ""; position: absolute; left: 4px; top: 40%; height: 20%; width: 4px; border-radius: 2px; background: var(--line); }
+  .splitter:hover::after, .splitter:focus-visible::after, .splitter.drag::after { background: var(--accent); }
+  .tabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
+  .tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 6px 10px; white-space: nowrap; }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabs .grow { flex: 1; }
+  .tabs .tool { border: 0; background: none; color: var(--muted); padding: 4px 8px; }
+  .view { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; display: none; }
+  .view.on { display: block; }
+  .view.fill.on { display: flex; flex-direction: column; }
+  @media (max-width: 900px) {
+    body { display: block; } .workspace { display: block; padding: 10px; }
+    .pane { margin-bottom: 12px; min-height: 70vh; } .splitter { display: none; } .kpis { margin-left: 0; }
+    #left { flex: none; }
+  }
+
+  h2 { font-size: 12.5px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  h3 { font-size: 13.5px; margin: 0 0 4px; }
+  .facts { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 12px; margin: 0 0 8px; }
   .facts dt { color: var(--muted); } .facts dd { margin: 0; }
   svg { display: block; width: 100%; height: auto; }
   svg text { fill: var(--ink); font: 11px -apple-system, "Segoe UI", sans-serif; }
   svg .dim { fill: var(--muted); }
+  svg .onband { fill: #1b1b1b; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; cursor: pointer;
-          font-size: 12px; background: var(--panel); color: var(--ink); display: inline-flex; gap: 6px; align-items: center; }
+  .chip { border-radius: 999px; padding: 2px 9px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
   .chip.off { opacity: .4; }
   .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
-  .events { max-height: 380px; overflow: auto; border-top: 1px solid var(--line); }
+  .sw { width: 12px; height: 9px; border-radius: 2px; display: inline-block; border: 1px solid rgba(0,0,0,.25); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
   .event { padding: 7px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  .event:hover, .event.sel { background: var(--soft); }
+  .event:hover, .event.sel, tr.sel td { background: var(--soft); }
   .event .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .event .type { font-weight: 600; }
+  .event .type { font-weight: 600; } .event .desc { color: var(--muted); margin-top: 2px; }
   .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
   .tag.exact { color: var(--accent); border-color: var(--accent); }
-  .event .desc { color: var(--muted); margin-top: 2px; }
   table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 500; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .evidence { margin-top: 12px; }
+  th, td { text-align: left; padding: 4px 7px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; position: sticky; top: -12px; background: var(--panel); }
+  th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: var(--ink); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.row { cursor: pointer; }
+  .heat { text-align: center; font-variant-numeric: tabular-nums; min-width: 34px; }
   .quote { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--soft); border-radius: 0 6px 6px 0; }
-  .pagetext { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: 12.5px;
-              border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-top: 8px; color: var(--muted); }
+  .pagetext { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; border: 1px solid var(--line);
+              border-radius: 6px; padding: 8px 10px; margin-top: 8px; color: var(--muted); }
   mark { background: var(--mark); color: var(--mark-ink); padding: 0 1px; border-radius: 2px; }
-  .muted { color: var(--muted); } .small { font-size: 12px; }
-  .scroll-x { overflow-x: auto; }
-  #map { height: 440px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  a { color: var(--accent); }
+  #map { flex: 1; min-height: 320px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   .leaflet-container { font: inherit; }
   .qlabel { color: var(--grid); font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; pointer-events: none; }
   .wlabel { color: var(--ink); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none;
@@ -70,17 +100,8 @@
   .leaflet-control-attribution { background: color-mix(in srgb, var(--panel) 80%, transparent) !important; color: var(--muted); font-size: 10px; }
   .leaflet-control-attribution a { color: var(--muted); }
   .leaflet-bar a { background: var(--panel); color: var(--ink); border-color: var(--line); }
-  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0 0; }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .sw { width: 12px; height: 9px; border-radius: 2px; display: inline-block; }
-  .wide { grid-column: 1 / -1; }
-  .kg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; }
-  @media (max-width: 1100px) { .kg { grid-template-columns: 1fr; } }
-  .kg h3 { font-size: 13.5px; margin: 0 0 4px; }
-  .kg svg { background: var(--soft); border-radius: 8px; border: 1px solid var(--line); }
+  .graphbox { background: var(--soft); border-radius: 8px; border: 1px solid var(--line); }
   .toggles label { margin-right: 12px; color: var(--ink); cursor: pointer; }
-  .kgnote { margin: 6px 0 0; }
-  a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -89,232 +110,214 @@
   <div><label for="well">Wellbore</label><select id="well"></select></div>
   <div><label for="radius">Offset radius</label>
     <select id="radius"><option>5</option><option>10</option><option selected>20</option><option>50</option></select> km</div>
-  <div class="sub" id="note"></div>
+  <div class="kpis" id="kpis"></div>
 </header>
-<main>
-  <section>
-    <h2>Offset wells</h2>
-    <div id="map" role="img" aria-label="Map of the Norwegian continental shelf with offset wells"></div>
-    <p class="small muted legend">
-      <span><i class="sw" style="background:#4f9d5d"></i>oil field</span>
-      <span><i class="sw" style="background:#c9584c"></i>gas field</span>
-      <span><i class="sw" style="background:#d49a3a"></i>oil and gas</span>
-      <span><i class="dot" style="background:var(--accent)"></i>well with report</span>
-      <span><i class="dot" style="background:var(--muted);opacity:.6"></i>other well</span>
-    </p>
-    <p class="small muted" id="maplegend"></p>
-    <h2 style="margin-top:14px">What happened nearby</h2>
-    <div class="scroll-x"><table id="offset"></table></div>
-  </section>
-  <section>
-    <h2>Well strip</h2>
-    <dl class="facts" id="facts"></dl>
-    <svg id="strip" viewBox="0 0 460 760" role="img" aria-label="Depth chart of the selected wellbore"></svg>
-    <p class="small muted">Filled marker: depth stated in the report. Hollow: depth from the surrounding text.
-      Bar: only the drilled interval is known. Mud weight line: SODIR table. Diamonds: leak-off values.</p>
-  </section>
-  <section>
-    <h2>Events in this wellbore</h2>
-    <div class="chips" id="chips"></div>
-    <div class="events" id="events"></div>
-    <div class="evidence" id="evidence"><p class="muted small">Select an event to see the report text it comes from.</p></div>
-  </section>
-  <section class="wide">
-    <h2>Knowledge graph</h2>
-    <div class="kg">
-      <div>
-        <h3>The model: what kinds of things, and how they connect</h3>
-        <p class="small toggles">
-          <label><input type="checkbox" id="ring-core" checked disabled> in the graph</label>
-          <label><input type="checkbox" id="ring-observed" checked> in the reports, not extracted yet</label>
-          <label><input type="checkbox" id="ring-planned"> planned (seismic, geology model)</label>
-        </p>
-        <svg id="model" viewBox="-130 -10 980 740" role="img" aria-label="Entity types and relationships of the knowledge graph"></svg>
-        <p class="small muted kgnote" id="modelnote"></p>
-      </div>
-      <div>
-        <h3 id="instancetitle">This wellbore as a graph</h3>
-        <p class="small muted legend" id="instancelegend"></p>
-        <svg id="instance" viewBox="0 0 900 720" role="img" aria-label="Graph of the selected wellbore"></svg>
-        <p class="small muted kgnote" id="instancenote"></p>
-      </div>
+
+<div class="workspace" id="workspace">
+  <div class="pane" id="left">
+    <div class="tabs" role="tablist" data-pane="left">
+      <button class="tab" role="tab" data-view="strip">Well strip</button>
+      <button class="tab" role="tab" data-view="map">Map</button>
+      <button class="tab" role="tab" data-view="timedepth">Time–depth</button>
+      <button class="tab" role="tab" data-view="graph">Wellbore graph</button>
+      <button class="tab" role="tab" data-view="model">Model</button>
+      <span class="grow"></span>
+      <button class="tool" data-max="left" title="Use the full width for this side">⤢</button>
     </div>
-  </section>
-</main>
+    <div class="view" id="view-strip">
+      <dl class="facts" id="facts"></dl>
+      <svg id="strip" viewBox="0 0 520 780" role="img" aria-label="Depth chart of the selected wellbore"></svg>
+      <p class="small muted legend" id="stratlegend"></p>
+      <p class="small muted">Formation colours follow the international chronostratigraphic chart, by the dominant age of each group.
+        Events: filled = depth stated in the report, hollow = depth from the surrounding text, bar = only the drilled interval is known.
+        Mud weight line: SODIR table. Diamonds: leak-off values.</p>
+    </div>
+    <div class="view fill" id="view-map">
+      <div id="map" role="img" aria-label="Map of the Norwegian continental shelf with offset wells"></div>
+      <p class="small muted legend">
+        <span><i class="sw" style="background:#4f9d5d"></i>oil field</span><span><i class="sw" style="background:#c9584c"></i>gas field</span>
+        <span><i class="sw" style="background:#d49a3a"></i>oil and gas</span>
+        <span><i class="dot" style="background:var(--accent)"></i>well with report</span>
+        <span><i class="dot" style="background:var(--muted);opacity:.6"></i>other well</span>
+      </p>
+      <p class="small muted" id="maplegend"></p>
+    </div>
+    <div class="view" id="view-timedepth">
+      <h3 id="tdtitle">Time–depth curve</h3>
+      <svg id="timedepth" viewBox="0 0 640 460" role="img" aria-label="Depth against days since spud"></svg>
+      <p class="small muted" id="tdnote"></p>
+    </div>
+    <div class="view" id="view-graph">
+      <h3 id="instancetitle">This wellbore as a graph</h3>
+      <p class="small muted legend" id="instancelegend"></p>
+      <svg id="instance" class="graphbox" viewBox="0 0 900 720" role="img" aria-label="Graph of the selected wellbore"></svg>
+      <p class="small muted" id="instancenote"></p>
+    </div>
+    <div class="view" id="view-model">
+      <h3>The model: what kinds of things, and how they connect</h3>
+      <p class="small toggles">
+        <label><input type="checkbox" id="ring-core" checked disabled> in the graph</label>
+        <label><input type="checkbox" id="ring-observed" checked> in the reports, not extracted yet</label>
+        <label><input type="checkbox" id="ring-planned"> planned (seismic, geology model)</label>
+      </p>
+      <svg id="model" class="graphbox" viewBox="-130 -10 980 740" role="img" aria-label="Entity types and relationships of the knowledge graph"></svg>
+      <p class="small muted" id="modelnote"></p>
+    </div>
+  </div>
+
+  <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize panels; arrow keys move it"></div>
+
+  <div class="pane" id="right">
+    <div class="tabs" role="tablist" data-pane="right">
+      <button class="tab" role="tab" data-view="events">Events</button>
+      <button class="tab" role="tab" data-view="table">Table</button>
+      <button class="tab" role="tab" data-view="source">Source</button>
+      <button class="tab" role="tab" data-view="nearby">Nearby</button>
+      <button class="tab" role="tab" data-view="matrix">Across wells</button>
+      <span class="grow"></span>
+      <button class="tool" data-max="right" title="Use the full width for this side">⤢</button>
+    </div>
+    <div class="view" id="view-events"><div class="chips" id="chips"></div><div id="events"></div></div>
+    <div class="view" id="view-table"><div class="chips" id="chips2"></div><table id="etable"></table></div>
+    <div class="view" id="view-source"><div id="evidence"><p class="muted small">Select an event to see the report text it comes from.</p></div></div>
+    <div class="view" id="view-nearby">
+      <h3 id="nearbytitle">What happened in other wells nearby</h3>
+      <table id="offset"></table>
+    </div>
+    <div class="view" id="view-matrix">
+      <h3>Events by formation group and type, all loaded wells</h3>
+      <table id="matrix"></table>
+      <p class="small muted" id="matrixnote"></p>
+    </div>
+  </div>
+</div>
+
 <script src="/static/vendor/leaflet.js"></script>
 <script>
 const TYPES = {lost_circulation:"#1f77b4", kick:"#d62728", stuck_pipe:"#9467bd", tight_hole:"#ff7f0e",
-  wellbore_instability:"#8c564b", pack_off:"#e377c2", washout:"#17becf", fishing:"#2ca02c",
-  sidetrack:"#7f7f7f", other:"#bcbd22"};
-const GROUP_HUES = [205, 28, 140, 275, 350, 55, 175, 320, 95, 235];
-const state = {well: null, radius: 20, off: new Set(), detail: null, selected: null};
+  wellbore_instability:"#8c564b", pack_off:"#e377c2", washout:"#17becf", fishing:"#2ca02c", sidetrack:"#7f7f7f", other:"#bcbd22"};
+// International Chronostratigraphic Chart colours (ICS / CGMW), by the dominant age of each NCS group.
+const AGE = {Neogene:"#FFE619", Paleogene:"#FD9A52", Paleocene:"#FDA75F", "Upper Cretaceous":"#A6D84A", "Lower Cretaceous":"#8CCD57",
+  "Upper Jurassic":"#B3E3EE", "Middle Jurassic":"#80CFD8", "Lower Jurassic":"#42AED0", "Upper Triassic":"#BD8CC3", "Middle Triassic":"#B168B1",
+  "Lower Triassic":"#983999", "Upper Permian":"#FBA794", "Middle Permian":"#FB745C", "Lower Permian":"#EF5845",
+  "Upper Carboniferous":"#99C2B5", "Lower Carboniferous":"#678F66"};
+const GROUP_AGE = {"NORDLAND GP":"Neogene", "HORDALAND GP":"Paleogene", "SOTBAKKEN GP":"Paleogene", "ROGALAND GP":"Paleocene",
+  "SHETLAND GP":"Upper Cretaceous", "NYGRUNNEN GP":"Upper Cretaceous", "CROMER KNOLL GP":"Lower Cretaceous", "ADVENTDALEN GP":"Lower Cretaceous",
+  "VIKING GP":"Upper Jurassic", "TYNE GP":"Upper Jurassic", "BOKNFJORD GP":"Upper Jurassic",
+  "VESTLAND GP":"Middle Jurassic", "BRENT GP":"Middle Jurassic", "FANGST GP":"Middle Jurassic", "FLADEN GP":"Middle Jurassic",
+  "DUNLIN GP":"Lower Jurassic", "BÅT GP":"Lower Jurassic", "STATFJORD GP":"Lower Jurassic",
+  "KAPP TOSCANA GP":"Upper Triassic", "HEGRE GP":"Middle Triassic", "SASSENDALEN GP":"Lower Triassic",
+  "ZECHSTEIN GP":"Upper Permian", "TEMPELFJORDEN GP":"Upper Permian", "BJARMELAND GP":"Middle Permian", "ROTLIEGEND GP":"Lower Permian",
+  "GIPSDALEN GP":"Upper Carboniferous", "BILLEFJORDEN GP":"Lower Carboniferous"};
+const stratColour = group => AGE[GROUP_AGE[group]] || "#c9ccd1";
+
+const state = {well: null, radius: 20, off: new Set(), detail: null, selected: null, sort: {key: "depth", dir: 1},
+               tabs: {left: "strip", right: "events"}};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const label = t => t.replaceAll("_", " ");
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 const api = async (path, params = {}) => {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""));
-  const r = await fetch(`${path}?${q}`);
-  const body = await r.json();
+  const r = await fetch(`${path}?${q}`), body = await r.json();
   if (!r.ok) throw new Error(body.error || r.statusText);
   return body;
 };
 const FRACTIONS = {0.125:"1/8", 0.25:"1/4", 0.375:"3/8", 0.5:"1/2", 0.625:"5/8", 0.75:"3/4", 0.875:"7/8"};
-const inches = d => { if (d == null) return ""; const w = Math.floor(d), f = FRACTIONS[+(d - w).toFixed(3)];
-  return (f ? `${w} ${f}` : String(+d.toFixed(2))) + '"'; };
+const inches = d => { if (d == null) return ""; const w = Math.floor(d), f = FRACTIONS[+(d - w).toFixed(3)]; return (f ? `${w} ${f}` : String(+d.toFixed(2))) + '"'; };
 const fmt = (v, n = 0) => v == null ? "–" : Number(v).toFixed(n);
-const hue = name => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 997; return GROUP_HUES[h % GROUP_HUES.length]; };
+const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "–";
 const eventDepth = e => e.top_md ?? e.context_top_md;
-
+const basisText = {stated: "exact depth", context_point: "depth from context", context_interval: "interval only", none: "no depth"};
 function depthText(e) {
   if (e.depth_basis === "stated") return e.top_md === e.base_md ? `${fmt(e.top_md)} m` : `${fmt(e.top_md)}–${fmt(e.base_md)} m`;
   if (e.depth_basis === "context_point") return `≈ ${fmt(e.context_top_md)} m`;
   if (e.depth_basis === "context_interval") return `within ${fmt(e.context_top_md)}–${fmt(e.context_base_md)} m`;
   return "no depth";
 }
-const basisText = {stated: "exact depth", context_point: "depth from context", context_interval: "interval only", none: "no depth"};
+
+// ---- layout: tabs, splitter, maximise ----------------------------------------------
+function showTab(pane, view) {
+  state.tabs[pane] = view; store.set("wg-tab-" + pane, view);
+  for (const t of document.querySelectorAll(`.tabs[data-pane="${pane}"] .tab`)) t.setAttribute("aria-selected", t.dataset.view === view);
+  for (const v of $(pane).querySelectorAll(".view")) v.classList.toggle("on", v.id === "view-" + view);
+  if (view === "map" && map) setTimeout(() => { map.invalidateSize(); if (mapBounds) map.fitBounds(mapBounds, {padding: [14, 14]}); }, 0);
+}
+function initLayout() {
+  for (const pane of ["left", "right"]) {
+    const saved = store.get("wg-tab-" + pane);
+    if (saved && $("view-" + saved) && $(pane).contains($("view-" + saved))) state.tabs[pane] = saved;
+    for (const t of document.querySelectorAll(`.tabs[data-pane="${pane}"] .tab`)) t.onclick = () => showTab(pane, t.dataset.view);
+    showTab(pane, state.tabs[pane]);
+  }
+  const ws = $("workspace"), sp = $("splitter");
+  const setSplit = p => { const v = Math.max(22, Math.min(78, p)); ws.style.setProperty("--split", v + "%"); store.set("wg-split", v); if (map) map.invalidateSize(); };
+  const saved = parseFloat(store.get("wg-split")); if (saved) setSplit(saved);
+  sp.onpointerdown = e => { sp.setPointerCapture(e.pointerId); sp.classList.add("drag");
+    sp.onpointermove = m => { const r = ws.getBoundingClientRect(); setSplit(100 * (m.clientX - r.left) / r.width); }; };
+  sp.onpointerup = e => { sp.releasePointerCapture(e.pointerId); sp.classList.remove("drag"); sp.onpointermove = null; };
+  sp.onkeydown = e => { const cur = parseFloat(getComputedStyle(ws).getPropertyValue("--split")) || 52;
+    if (e.key === "ArrowLeft") setSplit(cur - 3); if (e.key === "ArrowRight") setSplit(cur + 3); };
+  for (const b of document.querySelectorAll("[data-max]")) b.onclick = () => {
+    const cls = "max-" + b.dataset.max, on = ws.classList.contains(cls);
+    ws.classList.remove("max-left", "max-right"); if (!on) ws.classList.add(cls);
+    b.title = on ? "Use the full width for this side" : "Show both sides again";
+    if (map) setTimeout(() => map.invalidateSize(), 0);
+  };
+}
 
 async function init() {
+  initLayout();
   try {
     const [d, wells] = await Promise.all([api("/api/describe"), api("/api/report_wells")]);
     $("counts").textContent = `${d.counts.wellbore.toLocaleString()} wellbores · ${d.counts.document} reports · ${d.counts.event} events`;
-    $("note").textContent = d.note || "";
     $("well").innerHTML = wells.results.map(w => `<option value="${esc(w.name)}">${esc(w.name)} (${w.events} events)</option>`).join("");
     const first = [...wells.results].sort((a, b) => b.events - a.events)[0];
     if (!first) { $("counts").textContent += " · no reports loaded"; return; }
-    $("well").value = first.name; state.well = first.name;
-    await initMap();
-    loadModel();
-    $("well").onchange = e => { state.well = e.target.value; state.selected = null; load(); };
+    const wanted = store.get("wg-well"); state.well = wells.results.some(w => w.name === wanted) ? wanted : first.name;
+    $("well").value = state.well;
+    await initMap(); loadModel(); loadMatrix();
+    $("well").onchange = e => openWell(e.target.value);
     $("radius").onchange = e => { state.radius = +e.target.value; loadOffsets(); };
     load();
   } catch (err) { $("counts").textContent = "Could not load: " + err.message; }
 }
+function openWell(name) { $("well").value = name; state.well = name; state.selected = null; store.set("wg-well", name); load(); }
 
 async function load() {
   $("evidence").innerHTML = '<p class="muted small">Select an event to see the report text it comes from.</p>';
   state.detail = await api("/api/well", {name: state.well});
-  renderFacts(); renderChips(); renderEvents(); renderStrip(); loadOffsets(); loadInstanceGraph();
-}
-
-// ---- knowledge graph: the model (ontology) ---------------------------------------
-const RING_STYLE = {core: {r: 150, fill: "var(--accent)"}, observed: {r: 262, fill: "#c98a2b"}, planned: {r: 330, fill: "#8b78c9"}};
-let ontology = null;
-
-async function loadModel() {
-  ontology = await api("/api/ontology");
-  for (const ring of ["observed", "planned"]) $("ring-" + ring).onchange = renderModel;
-  renderModel();
-}
-
-function renderModel() {
-  const on = {core: true, observed: $("ring-observed").checked, planned: $("ring-planned").checked};
-  const C = 360, pos = {};
-  for (const ring of Object.keys(RING_STYLE)) {
-    const items = ontology.entities.filter(e => e.ring === ring);
-    items.forEach((e, i) => {
-      const a = -Math.PI / 2 + 2 * Math.PI * (i + (ring === "observed" ? .5 : 0)) / items.length;
-      pos[e.name] = {x: C + RING_STYLE[ring].r * Math.cos(a), y: C + RING_STYLE[ring].r * Math.sin(a), a, e};
-    });
-  }
-  let s = `<circle cx="${C}" cy="${C}" r="150" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
-  if (on.observed) s += `<circle cx="${C}" cy="${C}" r="262" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
-  if (on.planned) s += `<circle cx="${C}" cy="${C}" r="330" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
-  for (const r of ontology.relationships) {
-    const a = pos[r.from], b = pos[r.to];
-    if (!on[a.e.ring] || !on[b.e.ring]) continue;
-    const core = r.ring === "core";
-    if (r.from === r.to) { s += `<circle cx="${a.x + 13}" cy="${a.y - 13}" r="11" fill="none" stroke="var(--ink)" stroke-width="1.1" opacity=".55"><title>${r.from} ${r.name} ${r.to}</title></circle>`; continue; }
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${core ? "var(--ink)" : "var(--muted)"}" stroke-width="${core ? 1.3 : .7}" opacity="${core ? .6 : .45}" ${core ? "" : 'stroke-dasharray="4 4"'}><title>${r.from} ${r.name} ${r.to}</title></line>`;
-  }
-  for (const {x, y, a, e} of Object.values(pos)) {
-    if (!on[e.ring]) continue;
-    const radius = e.ring === "core" ? 9 + Math.log10((e.rows || 1) + 1) * 3.2 : 6;
-    const tip = `${e.name} · ${e.osdu_kind}${e.rows != null ? ` · ${e.rows.toLocaleString()} rows` : ""}${e.seen_in_pages ? ` · seen on ${e.seen_in_pages} pages` : ""}\n${e.description}`;
-    s += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${RING_STYLE[e.ring].fill}" fill-opacity="${e.ring === "core" ? .95 : .75}" stroke="var(--panel)" stroke-width="1.5"><title>${esc(tip)}</title></circle>`;
-    const out = e.ring === "core" ? radius + 5 : 10, lx = x + out * Math.cos(a), ly = y + out * Math.sin(a);
-    const anchor = Math.abs(Math.cos(a)) < .06 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
-    const dy = Math.sin(a) > .5 ? 12 : Math.sin(a) < -.5 ? -3 : 4;
-    s += `<text x="${lx}" y="${ly + dy}" text-anchor="${anchor}" font-size="${e.ring === "core" ? 12 : 10.5}" font-weight="${e.ring === "core" ? 600 : 400}">${esc(e.name)}</text>`;
-    if (e.ring === "core" && e.rows != null) s += `<text x="${lx}" y="${ly + dy + 12}" text-anchor="${anchor}" font-size="10" class="dim">${e.rows.toLocaleString()}</text>`;
-  }
-  $("model").innerHTML = s;
-  const n = ring => ontology.entities.filter(e => e.ring === ring).length;
-  $("modelnote").textContent = `${n("core")} entity types hold data (blue, with row counts); ${n("observed")} more are present in the reports but not extracted (orange); ${n("planned")} are planned with no data source (purple). Solid lines are relationships stored in the graph. Hover for the OSDU kind and meaning.`;
-}
-
-// ---- knowledge graph: one wellbore as nodes and edges ----------------------------
-const KIND_STYLE = {Wellbore: {fill: "var(--ink)", r: 13}, Organisation: {fill: "#7a8794", r: 7}, Field: {fill: "#4f9d5d", r: 7},
-  Document: {fill: "#b9a13a", r: 7}, HoleSection: {fill: "#56697a", r: 9}, GeologicalFormation: {fill: "#b98fc9", r: 8}, DrillingEvent: {fill: "#888", r: 4.5}};
-
-async function loadInstanceGraph() {
-  const g = await api("/api/graph", {name: state.well});
-  const W = 900, H = 720, cx = W / 2, cy = H / 2;
-  const nodes = g.nodes.map((n, i) => {       // start on rings by kind so the layout settles the same way each time
-    const ring = {Wellbore: 0, HoleSection: 120, GeologicalFormation: 190, Document: 110, Organisation: 110, Field: 110, DrillingEvent: 290}[n.kind];
-    const a = i * 2.399963;                    // golden angle: even spread
-    return {...n, x: cx + ring * Math.cos(a), y: cy + ring * Math.sin(a)};
-  });
-  const index = Object.fromEntries(nodes.map((n, i) => [n.id, i]));
-  const links = g.edges.map(e => ({...e, s: index[e.source], t: index[e.target]}));
-  const rest = e => e.relation === "IN_SECTION" || e.relation === "IN_FORMATION" ? 95 : e.relation === "PART_OF" ? 55 : 115;
-  for (let step = 0; step < 320; step++) {     // small force layout: repel, spring, centre
-    const k = .9 * (1 - step / 320) + .05;
-    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy || .01;
-      if (d2 > 90000) continue;
-      const f = 900 / d2, d = Math.sqrt(d2); dx = dx / d * f * k * 6; dy = dy / d * f * k * 6;
-      a.x += dx; a.y += dy; b.x -= dx; b.y -= dy;
-    }
-    for (const l of links) {
-      const a = nodes[l.s], b = nodes[l.t]; const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .01;
-      const f = (d - rest(l)) / d * .06 * k * 6; a.x += dx * f; a.y += dy * f; b.x -= dx * f; b.y -= dy * f;
-    }
-    for (const n of nodes) {
-      if (n.kind === "Wellbore") { n.x = cx; n.y = cy; continue; }
-      n.x += (cx - n.x) * .004; n.y += (cy - n.y) * .004;
-      n.x = Math.max(24, Math.min(W - 24, n.x)); n.y = Math.max(20, Math.min(H - 20, n.y));
-    }
-  }
-  let s = "";
-  for (const l of links) { const a = nodes[l.s], b = nodes[l.t];
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--muted)" stroke-width="${a.kind === "DrillingEvent" ? .6 : 1.2}" opacity="${a.kind === "DrillingEvent" ? .45 : .7}"><title>${esc(a.label)} ${l.relation} ${esc(b.label)}</title></line>`; }
-  for (const n of nodes) {
-    const st = KIND_STYLE[n.kind], ev = n.kind === "DrillingEvent";
-    const fill = ev ? TYPES[n.event_type] : st.fill, exact = !ev || n.depth_basis === "stated";
-    const tip = ev ? `${n.label} · ${n.depth_md == null ? "no depth" : fmt(n.depth_md) + " m"} (${basisText[n.depth_basis]})\n${n.description}` : `${n.kind}: ${n.label}`;
-    s += `<circle ${ev ? `data-id="${n.event_id}" style="cursor:pointer"` : ""} cx="${n.x}" cy="${n.y}" r="${st.r}" fill="${exact ? fill : "var(--panel)"}" stroke="${exact ? "var(--panel)" : fill}" stroke-width="${exact ? 1.2 : 1.8}"><title>${esc(tip)}</title></circle>`;
-    if (!ev) { const short = n.kind === "HoleSection" ? inches(parseFloat(n.label)) : n.label;
-      s += `<text x="${n.x + st.r + 3}" y="${n.y + 4}" font-size="${n.kind === "Wellbore" ? 13 : 10.5}" font-weight="${n.kind === "Wellbore" ? 700 : 500}" style="paint-order:stroke;stroke:var(--soft);stroke-width:3px">${esc(short)}</text>`; }
-  }
-  $("instance").innerHTML = s;
-  for (const el of $("instance").querySelectorAll("[data-id]")) el.onclick = () => { select(el.dataset.id); $("evidence").scrollIntoView({behavior: "smooth", block: "center"}); };
-  const count = kind => g.nodes.filter(n => n.kind === kind).length;
-  $("instancetitle").textContent = `${g.wellbore} as a graph`;
-  $("instancelegend").innerHTML = [["Wellbore", "wellbore"], ["HoleSection", "hole section"], ["GeologicalFormation", "group / formation"], ["Document", "report"], ["Field", "field"], ["Organisation", "operator"]]
-    .filter(([k]) => count(k)).map(([k, t]) => `<span><i class="dot" style="background:${KIND_STYLE[k].fill}"></i>${t}</span>`).join("") + `<span><i class="dot" style="background:${TYPES.tight_hole}"></i>event, coloured by type (hollow: depth from context)</span>`;
-  $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in. Click an event to read its source.`;
+  renderFacts(); renderKpis(); renderChips(); renderEvents(); renderTable(); renderStrip();
+  loadOffsets(); loadInstanceGraph(); loadTimeDepth();
 }
 
 function renderFacts() {
   const w = state.detail.wellbore;
-  const rows = [["Operator", w.operator], ["Type", [w.wellbore_type, w.purpose].filter(Boolean).join(" · ")],
-    ["Field", w.field], ["Completed", w.completion_date], ["Total depth", w.total_depth_md ? `${fmt(w.total_depth_md)} m MD` : null],
-    ["Water depth", w.water_depth ? `${fmt(w.water_depth)} m` : null]];
+  const rows = [["Operator", w.operator], ["Type", [w.wellbore_type, w.purpose].filter(Boolean).join(" · ")], ["Field", w.field],
+    ["Completed", w.completion_date], ["Total depth", w.total_depth_md ? `${fmt(w.total_depth_md)} m MD` : null],
+    ["Water depth", w.water_depth ? `${fmt(w.water_depth)} m` : null], ["Rig", w.drilling_facility],
+    ["Reports", state.detail.documents.length || null]];
   $("facts").innerHTML = rows.filter(r => r[1]).map(r => `<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join("");
 }
-
+function renderKpis() {
+  const ev = state.detail.events, n = ev.length, count = f => ev.filter(f).length;
+  const items = [[n, "events"], [pct(count(e => e.depth_basis === "stated"), n), "exact depth"],
+    [pct(count(e => e.depth_basis !== "none"), n), "any depth"], [pct(count(e => e.hole_diameter_in != null), n), "hole section"],
+    [pct(count(e => e.formations && e.formations.length), n), "formation"], [pct(count(e => e.mud_weight_sg != null), n), "mud weight"]];
+  $("kpis").innerHTML = items.map(([v, t]) => `<div class="kpi"><b>${v}</b><span>${t}</span></div>`).join("");
+}
 function visibleEvents() { return state.detail.events.filter(e => !state.off.has(e.event_type)); }
-
 function renderChips() {
   const counts = {}; for (const e of state.detail.events) counts[e.event_type] = (counts[e.event_type] || 0) + 1;
-  $("chips").innerHTML = Object.keys(TYPES).filter(t => counts[t]).map(t =>
+  const html = Object.keys(TYPES).filter(t => counts[t]).map(t =>
     `<button class="chip ${state.off.has(t) ? "off" : ""}" data-t="${t}"><span class="dot" style="background:${TYPES[t]}"></span>${label(t)} ${counts[t]}</button>`).join("")
     || '<span class="muted small">No events extracted for this wellbore.</span>';
-  for (const b of $("chips").querySelectorAll("button")) b.onclick = () => {
-    state.off.has(b.dataset.t) ? state.off.delete(b.dataset.t) : state.off.add(b.dataset.t);
-    renderChips(); renderEvents(); renderStrip(); };
+  for (const id of ["chips", "chips2"]) { $(id).innerHTML = html;
+    for (const b of $(id).querySelectorAll("button")) b.onclick = () => {
+      state.off.has(b.dataset.t) ? state.off.delete(b.dataset.t) : state.off.add(b.dataset.t);
+      renderChips(); renderEvents(); renderTable(); renderStrip(); loadTimeDepth(); }; }
 }
-
 function renderEvents() {
   const list = visibleEvents().sort((a, b) => (eventDepth(a) ?? 1e9) - (eventDepth(b) ?? 1e9));
   $("events").innerHTML = list.map(e => `
@@ -330,56 +333,71 @@ function renderEvents() {
     </div>`).join("");
   for (const el of $("events").querySelectorAll(".event")) el.onclick = () => select(el.dataset.id);
 }
+const COLUMNS = [["type", "Event", e => e.event_type], ["depth", "Depth, m", e => eventDepth(e)], ["basis", "Depth basis", e => e.depth_basis],
+  ["hole", "Hole", e => e.hole_diameter_in], ["fm", "Formation", e => (e.formations || []).slice(-1)[0] || ""],
+  ["mw", "Mud, sg", e => e.mud_weight_sg], ["src", "Mud source", e => e.mud_weight_source || ""], ["conf", "Conf.", e => e.confidence]];
+function renderTable() {
+  const {key, dir} = state.sort, get = COLUMNS.find(c => c[0] === key)[2];
+  const rows = visibleEvents().sort((a, b) => { const x = get(a), y = get(b);
+    if (x == null || x === "") return 1; if (y == null || y === "") return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+  $("etable").innerHTML = `<tr>${COLUMNS.map(([k, t]) => `<th class="sortable ${["depth", "hole", "mw", "conf"].includes(k) ? "num" : ""}" data-k="${k}">${t}${k === key ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr>` +
+    rows.map(e => `<tr class="row ${state.selected === e.event_id ? "sel" : ""}" data-id="${e.event_id}">
+      <td><span class="dot" style="background:${TYPES[e.event_type]}"></span> ${label(e.event_type)}</td>
+      <td class="num">${e.depth_basis === "context_interval" ? fmt(e.context_top_md) + "–" + fmt(e.context_base_md) : fmt(eventDepth(e))}</td>
+      <td>${basisText[e.depth_basis] || ""}</td><td class="num">${e.hole_diameter_in ? inches(e.hole_diameter_in) : "–"}</td>
+      <td>${esc((e.formations || []).slice(-1)[0] || "–")}</td><td class="num">${fmt(e.mud_weight_sg, 2)}</td>
+      <td>${e.mud_weight_source === "sodir_mud_table" ? "SODIR table" : e.mud_weight_source || "–"}</td><td class="num">${fmt(e.confidence, 2)}</td></tr>`).join("");
+  for (const th of $("etable").querySelectorAll("th")) th.onclick = () => { const k = th.dataset.k;
+    state.sort = {key: k, dir: state.sort.key === k ? -state.sort.dir : 1}; renderTable(); };
+  for (const tr of $("etable").querySelectorAll("tr.row")) tr.onclick = () => select(tr.dataset.id);
+}
 
 async function select(id) {
-  state.selected = id; renderEvents(); renderStrip();
+  state.selected = id; renderEvents(); renderTable(); renderStrip(); showTab("right", "source");
   const box = $("evidence"); box.innerHTML = '<p class="muted small">Loading source…</p>';
   try {
     const ev = await api("/api/evidence", {id, page_text: 1});
-    const quote = ev.text_span || "", text = ev.page_text || "";
-    const squash = s => s.replace(/\s+/g, " ");
-    let body = esc(text);
-    const flat = squash(text), i = flat.indexOf(squash(quote).slice(0, 80));
-    if (text && i >= 0) {   // highlight on the whitespace-normalised text
-      const q = squash(quote), end = flat.indexOf(q) === i ? i + q.length : i + 80;
-      body = esc(flat.slice(0, i)) + "<mark>" + esc(flat.slice(i, end)) + "</mark>" + esc(flat.slice(end));
-    }
-    box.innerHTML = `<h2>Source</h2>
+    const e = state.detail.events.find(x => x.event_id === id) || {};
+    const quote = ev.text_span || "", text = ev.page_text || "", squash = s => s.replace(/\s+/g, " ");
+    let body = esc(text); const flat = squash(text), i = flat.indexOf(squash(quote).slice(0, 80));
+    if (text && i >= 0) { const q = squash(quote), end = flat.indexOf(q) === i ? i + q.length : i + 80;
+      body = esc(flat.slice(0, i)) + "<mark>" + esc(flat.slice(i, end)) + "</mark>" + esc(flat.slice(end)); }
+    box.innerHTML = `<h3><span class="dot" style="background:${TYPES[ev.event_type]}"></span> ${label(ev.event_type)} · ${e.depth_basis ? depthText(e) : ""}</h3>
       <div class="quote">“${esc(quote)}”</div>
-      <p class="small muted">${esc(ev.document.title || "")} · PDF page ${ev.pdf_page ?? "?"} · confidence ${fmt(ev.confidence, 2)}
-        ${ev.remedy ? "" : ""}· <a href="${esc(ev.source.url)}" target="_blank" rel="noopener">Zenodo record</a></p>
-      ${text ? `<div class="pagetext" id="pagetext">${body}</div>` : '<p class="muted small">Page text is not loaded for this report.</p>'}`;
+      <dl class="facts" style="margin-top:8px">${[["Hole", ev.hole_diameter_in ? inches(ev.hole_diameter_in) : null], ["Formation", (ev.formations || []).join(" · ") || null],
+        ["Mud weight", ev.mud_weight_sg ? `${fmt(ev.mud_weight_sg, 2)} sg (${ev.mud_weight_source === "sodir_mud_table" ? "SODIR table" : "report: " + (ev.mud_weight_raw || "")})` : null],
+        ["Remedy", e.remedy], ["Lesson", e.lesson]].filter(r => r[1]).map(r => `<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join("")}</dl>
+      <p class="small muted">${esc(ev.document.title || "")} · PDF page ${ev.pdf_page ?? "?"} · confidence ${fmt(ev.confidence, 2)} · <a href="${esc(ev.source.url)}" target="_blank" rel="noopener">Zenodo record</a></p>
+      ${text ? `<div class="pagetext">${body}</div>` : '<p class="muted small">Page text is not loaded for this report.</p>'}`;
     const m = box.querySelector("mark"); if (m) m.scrollIntoView({block: "center"});
   } catch (err) { box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; }
 }
 
+// ---- well strip ---------------------------------------------------------------------
 function renderStrip() {
-  const d = state.detail, W = 460, H = 760, top = 34, bottom = 14;
+  const d = state.detail, W = 520, H = 780, top = 34, bottom = 14;
   const maxDepth = Math.max(d.wellbore.total_depth_md || 0, ...d.formation_tops.map(f => f.base_md || f.top_md || 0),
     ...d.hole_sections.map(h => h.base_md || h.casing_depth_md || 0), ...d.events.map(e => e.base_md || e.context_base_md || 0), 500);
   const y = m => top + (H - top - bottom) * m / maxDepth;
-  const X = {axis: 40, fm: [46, 180], split: 112, hole: [188, 240], mud: [252, 352], ev: [364, 452]};
-  let s = "";
-  const head = (x, t) => `<text x="${x}" y="14" class="dim">${t}</text>`;
+  const X = {axis: 40, fm: [46, 212], split: 122, hole: [222, 280], mud: [294, 400], ev: [414, 512]};
+  let s = ""; const head = (x, t) => `<text x="${x}" y="14" class="dim">${t}</text>`;
   s += head(X.fm[0], "Group") + head(X.split + 3, "Formation") + head(X.hole[0], "Hole") + head(X.mud[0], "Mud weight, sg") + head(X.ev[0], "Events");
   const step = maxDepth > 3000 ? 500 : 250;
   for (let m = 0; m <= maxDepth; m += step)
-    s += `<line x1="${X.axis}" x2="${W - 6}" y1="${y(m)}" y2="${y(m)}" stroke="var(--line)" stroke-width=".6"/>
-          <text x="${X.axis - 4}" y="${y(m) + 4}" text-anchor="end" class="dim">${m}</text>`;
-  // formations: groups as bands, lower levels as tick labels
-  const groups = d.formation_tops.filter(f => f.level === "GROUP" && f.top_md != null);
+    s += `<line x1="${X.axis}" x2="${W - 6}" y1="${y(m)}" y2="${y(m)}" stroke="var(--line)" stroke-width=".6"/><text x="${X.axis - 4}" y="${y(m) + 4}" text-anchor="end" class="dim">${m}</text>`;
+  const groups = d.formation_tops.filter(f => f.level === "GROUP" && f.top_md != null), ages = new Map();
   for (const g of groups) {
-    const y0 = y(g.top_md), y1 = y(g.base_md ?? maxDepth), h = Math.max(1, y1 - y0);
-    s += `<rect x="${X.fm[0]}" y="${y0}" width="${X.fm[1] - X.fm[0]}" height="${h}" fill="hsl(${hue(g.formation)} 55% 55% / .28)" stroke="var(--line)" stroke-width=".5"><title>${esc(g.formation)} ${fmt(g.top_md)}–${fmt(g.base_md)} m</title></rect>`;
-    if (h > 12) s += `<text x="${X.fm[0] + 3}" y="${y0 + 11}" font-size="10" font-weight="600">${esc(g.formation.replace(/ GP$/, ""))}</text>`;
+    const y0 = y(g.top_md), y1 = y(g.base_md ?? maxDepth), h = Math.max(1, y1 - y0), age = GROUP_AGE[g.formation];
+    if (age) ages.set(age, AGE[age]);
+    s += `<rect x="${X.fm[0]}" y="${y0}" width="${X.fm[1] - X.fm[0]}" height="${h}" fill="${stratColour(g.formation)}" stroke="rgba(0,0,0,.35)" stroke-width=".5"><title>${esc(g.formation)} ${fmt(g.top_md)}–${fmt(g.base_md)} m${age ? " · " + age : ""}</title></rect>`;
+    if (h > 12) s += `<text x="${X.fm[0] + 3}" y="${y0 + 11}" font-size="10" font-weight="600" class="onband">${esc(g.formation.replace(/ GP$/, ""))}</text>`;
   }
   let lastLabel = -99;
   for (const f of d.formation_tops.filter(f => f.level !== "GROUP" && f.top_md != null && !/NO FORMAL|UNDIFF|NO GROUP/.test(f.formation))) {
     const yy = y(f.top_md);
-    s += `<line x1="${X.split}" x2="${X.fm[1]}" y1="${yy}" y2="${yy}" stroke="var(--muted)" stroke-width=".5"><title>${esc(f.formation)} top ${fmt(f.top_md)} m</title></line>`;
-    if (yy - lastLabel > 11) { s += `<text x="${X.split + 3}" y="${yy + 10}" class="dim" font-size="9.5">${esc(f.formation.replace(/ (FM|MBR)$/, ""))}</text>`; lastLabel = yy; }
+    s += `<line x1="${X.split}" x2="${X.fm[1]}" y1="${yy}" y2="${yy}" stroke="rgba(0,0,0,.45)" stroke-width=".5"><title>${esc(f.formation)} top ${fmt(f.top_md)} m</title></line>`;
+    if (yy - lastLabel > 11) { s += `<text x="${X.split + 3}" y="${yy + 10}" font-size="9.5" class="onband">${esc(f.formation.replace(/ (FM|MBR)$/, ""))}</text>`; lastLabel = yy; }
   }
-  // hole sections: width by diameter
   let prev = 0; const mid = (X.hole[0] + X.hole[1]) / 2;
   for (const h of [...d.hole_sections].sort((a, b) => (a.base_md ?? a.casing_depth_md ?? 0) - (b.base_md ?? b.casing_depth_md ?? 0))) {
     const base = h.base_md ?? h.casing_depth_md; if (base == null || h.hole_diameter_in == null) continue;
@@ -388,113 +406,180 @@ function renderStrip() {
     if (y(base) - y(prev) > 14) s += `<text x="${mid}" y="${(y(prev) + y(base)) / 2 + 4}" text-anchor="middle">${inches(h.hole_diameter_in)}</text>`;
     prev = base;
   }
-  // mud weight
   const mw = v => X.mud[0] + (X.mud[1] - X.mud[0]) * (Math.min(2.2, Math.max(1.0, v)) - 1.0) / 1.2;
-  for (const v of [1.0, 1.4, 1.8, 2.2]) s += `<text x="${mw(v)}" y="27" text-anchor="middle" class="dim" font-size="9.5">${v.toFixed(1)}</text>
-     <line x1="${mw(v)}" x2="${mw(v)}" y1="${top}" y2="${H - bottom}" stroke="var(--line)" stroke-width=".5"/>`;
+  for (const v of [1.0, 1.4, 1.8, 2.2]) s += `<text x="${mw(v)}" y="27" text-anchor="middle" class="dim" font-size="9.5">${v.toFixed(1)}</text><line x1="${mw(v)}" x2="${mw(v)}" y1="${top}" y2="${H - bottom}" stroke="var(--line)" stroke-width=".5"/>`;
   const checks = d.mud_checks.filter(c => c.md <= maxDepth);
   if (checks.length > 1) s += `<polyline fill="none" stroke="var(--accent)" stroke-width="1.6" points="${checks.map(c => `${mw(c.mud_weight_sg)},${y(c.md)}`).join(" ")}"/>`;
-  for (const h of d.hole_sections) if (h.lot_mud_density_sg && h.casing_depth_md) {
-    const cx = mw(h.lot_mud_density_sg), cy = y(h.casing_depth_md);
-    s += `<path d="M${cx} ${cy - 5} L${cx + 5} ${cy} L${cx} ${cy + 5} L${cx - 5} ${cy} Z" fill="none" stroke="var(--ink)" stroke-width="1.2"><title>Leak-off ${fmt(h.lot_mud_density_sg, 2)} sg at ${fmt(h.casing_depth_md)} m</title></path>`;
-  }
-  // events
+  for (const h of d.hole_sections) if (h.lot_mud_density_sg && h.casing_depth_md) { const cx = mw(h.lot_mud_density_sg), cy = y(h.casing_depth_md);
+    s += `<path d="M${cx} ${cy - 5} L${cx + 5} ${cy} L${cx} ${cy + 5} L${cx - 5} ${cy} Z" fill="none" stroke="var(--ink)" stroke-width="1.2"><title>Leak-off ${fmt(h.lot_mud_density_sg, 2)} sg at ${fmt(h.casing_depth_md)} m</title></path>`; }
   const shown = visibleEvents(), lanes = Object.keys(TYPES).filter(t => shown.some(e => e.event_type === t));
   const lane = t => X.ev[0] + 8 + (X.ev[1] - X.ev[0] - 16) * (lanes.length > 1 ? lanes.indexOf(t) / (lanes.length - 1) : .5);
   for (const e of shown) {
-    const c = TYPES[e.event_type], x = lane(e.event_type), sel = state.selected === e.event_id;
-    const tip = `<title>${label(e.event_type)} · ${depthText(e)}</title>`;
+    const c = TYPES[e.event_type], x = lane(e.event_type), sel = state.selected === e.event_id, tip = `<title>${label(e.event_type)} · ${depthText(e)}</title>`;
     if (e.depth_basis === "context_interval")
       s += `<line data-id="${e.event_id}" x1="${x}" x2="${x}" y1="${y(e.context_top_md)}" y2="${y(e.context_base_md)}" stroke="${c}" stroke-width="${sel ? 5 : 3}" stroke-opacity=".45" stroke-linecap="round" style="cursor:pointer">${tip}</line>`;
-    else if (eventDepth(e) != null) {
-      const exact = e.depth_basis === "stated";
+    else if (eventDepth(e) != null) { const exact = e.depth_basis === "stated";
       if (exact && e.base_md > e.top_md) s += `<line x1="${x}" x2="${x}" y1="${y(e.top_md)}" y2="${y(e.base_md)}" stroke="${c}" stroke-width="2"/>`;
       s += `<circle data-id="${e.event_id}" cx="${x}" cy="${y(eventDepth(e))}" r="${sel ? 6.5 : 4.2}" fill="${exact ? c : "var(--panel)"}" stroke="${sel ? "var(--ink)" : c}" stroke-width="${sel ? 2 : 1.6}" style="cursor:pointer">${tip}</circle>`;
-      if (e.mud_weight_sg && e.mud_weight_source === "report")
-        s += `<circle cx="${mw(e.mud_weight_sg)}" cy="${y(eventDepth(e))}" r="2.6" fill="${c}"><title>${fmt(e.mud_weight_sg, 2)} sg stated in the report</title></circle>`;
-    }
+      if (e.mud_weight_sg && e.mud_weight_source === "report") s += `<circle cx="${mw(e.mud_weight_sg)}" cy="${y(eventDepth(e))}" r="2.6" fill="${c}"><title>${fmt(e.mud_weight_sg, 2)} sg stated in the report</title></circle>`; }
   }
   $("strip").innerHTML = s;
   for (const el of $("strip").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
+  $("stratlegend").innerHTML = [...ages].map(([age, colour]) => `<span><i class="sw" style="background:${colour}"></i>${age}</span>`).join("") +
+    (groups.some(g => !GROUP_AGE[g.formation]) ? `<span><i class="sw" style="background:#c9ccd1"></i>no age assigned</span>` : "");
 }
 
-const FIELD_COLOURS = {OIL: "#4f9d5d", GAS: "#c9584c", "OIL/GAS": "#d49a3a", "GAS/CONDENSATE": "#b0577f", "OIL/CONDENSATE": "#7a9a3c"};
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-let map, wellLayer, blockLayer;
+// ---- time–depth curve ---------------------------------------------------------------
+async function loadTimeDepth() {
+  const d = await api("/api/daily", {name: state.well});
+  const rows = d.rows.filter(r => r.report_date), W = 640, H = 460, L = 52, R = 14, T = 18, B = 34;
+  $("tdtitle").textContent = `Time–depth curve, ${d.wellbore}`;
+  if (rows.length < 2) { $("timedepth").innerHTML = ""; $("tdnote").textContent = "No daily drilling report table was found for this wellbore. Its daily log may be written as plain text, which is not parsed yet."; return; }
+  const day0 = new Date(rows[0].report_date), day = r => (new Date(r.report_date) - day0) / 864e5;
+  let run = 0; const pts = [];
+  for (const r of rows) { if (r.depth_md != null) run = Math.max(run, r.depth_md); pts.push({x: day(r), y: run, mw: r.mud_weight_sg, date: r.report_date}); }
+  const maxDay = Math.max(1, pts[pts.length - 1].x), maxDepth = Math.max(run, 100);
+  const x = v => L + (W - L - R) * v / maxDay, y = v => T + (H - T - B) * v / maxDepth;
+  let s = "";
+  for (let m = 0; m <= maxDepth; m += maxDepth > 3000 ? 1000 : 500) s += `<line x1="${L}" x2="${W - R}" y1="${y(m)}" y2="${y(m)}" stroke="var(--line)" stroke-width=".6"/><text x="${L - 5}" y="${y(m) + 4}" text-anchor="end" class="dim">${m}</text>`;
+  for (let v = 0; v <= maxDay; v += maxDay > 120 ? 30 : maxDay > 40 ? 10 : 5) s += `<line x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${H - B}" stroke="var(--line)" stroke-width=".6"/><text x="${x(v)}" y="${H - B + 14}" text-anchor="middle" class="dim">${v}</text>`;
+  s += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle" class="dim">days since ${rows[0].report_date}</text><text x="6" y="10" class="dim">m MD</text>`;
+  s += `<polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${pts.map(p => `${x(p.x)},${y(p.y)}`).join(" ")}"/>`;
+  const reached = depth => { const p = pts.find(p => p.y >= depth - 1); return p ? p.x : null; };
+  let placed = 0;
+  for (const e of visibleEvents()) { const depth = eventDepth(e); if (depth == null || e.depth_basis === "context_interval") continue;
+    const dx = reached(depth); if (dx == null) continue; placed++;
+    const exact = e.depth_basis === "stated", c = TYPES[e.event_type];
+    s += `<circle data-id="${e.event_id}" cx="${x(dx)}" cy="${y(depth)}" r="${state.selected === e.event_id ? 6.5 : 4.2}" fill="${exact ? c : "var(--panel)"}" stroke="${c}" stroke-width="1.6" style="cursor:pointer"><title>${label(e.event_type)} · ${depthText(e)}</title></circle>`; }
+  $("timedepth").innerHTML = s;
+  for (const el of $("timedepth").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
+  $("tdnote").textContent = `${rows.length} daily report rows over ${Math.round(maxDay)} days. The line is the deepest depth reported so far. ${placed} events are placed on the first day the well reached their depth, which is an approximation: an event during a later trip is shown early.`;
+}
 
+// ---- knowledge graph: the model -----------------------------------------------------
+const RING_STYLE = {core: {r: 150, fill: "var(--accent)"}, observed: {r: 262, fill: "#c98a2b"}, planned: {r: 330, fill: "#8b78c9"}};
+let ontology = null;
+async function loadModel() { ontology = await api("/api/ontology"); for (const ring of ["observed", "planned"]) $("ring-" + ring).onchange = renderModel; renderModel(); }
+function renderModel() {
+  const on = {core: true, observed: $("ring-observed").checked, planned: $("ring-planned").checked}, C = 360, pos = {};
+  for (const ring of Object.keys(RING_STYLE)) { const items = ontology.entities.filter(e => e.ring === ring);
+    items.forEach((e, i) => { const a = -Math.PI / 2 + 2 * Math.PI * (i + (ring === "observed" ? .5 : 0)) / items.length;
+      pos[e.name] = {x: C + RING_STYLE[ring].r * Math.cos(a), y: C + RING_STYLE[ring].r * Math.sin(a), a, e}; }); }
+  let s = `<circle cx="${C}" cy="${C}" r="150" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
+  if (on.observed) s += `<circle cx="${C}" cy="${C}" r="262" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
+  if (on.planned) s += `<circle cx="${C}" cy="${C}" r="330" fill="none" stroke="var(--line)" stroke-dasharray="2 5"/>`;
+  for (const r of ontology.relationships) { const a = pos[r.from], b = pos[r.to]; if (!on[a.e.ring] || !on[b.e.ring]) continue; const core = r.ring === "core";
+    if (r.from === r.to) { s += `<circle cx="${a.x + 13}" cy="${a.y - 13}" r="11" fill="none" stroke="var(--ink)" stroke-width="1.1" opacity=".55"><title>${r.from} ${r.name} ${r.to}</title></circle>`; continue; }
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${core ? "var(--ink)" : "var(--muted)"}" stroke-width="${core ? 1.3 : .7}" opacity="${core ? .6 : .45}" ${core ? "" : 'stroke-dasharray="4 4"'}><title>${r.from} ${r.name} ${r.to}</title></line>`; }
+  for (const {x, y, a, e} of Object.values(pos)) { if (!on[e.ring]) continue;
+    const radius = e.ring === "core" ? 9 + Math.log10((e.rows || 1) + 1) * 3.2 : 6;
+    const tip = `${e.name} · ${e.osdu_kind}${e.rows != null ? ` · ${e.rows.toLocaleString()} rows` : ""}${e.seen_in_pages ? ` · seen on ${e.seen_in_pages} pages` : ""}\n${e.description}`;
+    s += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${RING_STYLE[e.ring].fill}" fill-opacity="${e.ring === "core" ? .95 : .75}" stroke="var(--panel)" stroke-width="1.5"><title>${esc(tip)}</title></circle>`;
+    const out = e.ring === "core" ? radius + 5 : 10, lx = x + out * Math.cos(a), ly = y + out * Math.sin(a);
+    const anchor = Math.abs(Math.cos(a)) < .06 ? "middle" : Math.cos(a) > 0 ? "start" : "end", dy = Math.sin(a) > .5 ? 12 : Math.sin(a) < -.5 ? -3 : 4;
+    s += `<text x="${lx}" y="${ly + dy}" text-anchor="${anchor}" font-size="${e.ring === "core" ? 12 : 10.5}" font-weight="${e.ring === "core" ? 600 : 400}">${esc(e.name)}</text>`;
+    if (e.ring === "core" && e.rows != null) s += `<text x="${lx}" y="${ly + dy + 12}" text-anchor="${anchor}" font-size="10" class="dim">${e.rows.toLocaleString()}</text>`; }
+  $("model").innerHTML = s; const n = ring => ontology.entities.filter(e => e.ring === ring).length;
+  $("modelnote").textContent = `${n("core")} entity types hold data (blue, with row counts); ${n("observed")} more are present in the reports but not extracted (orange); ${n("planned")} are planned with no data source (purple). Solid lines are relationships stored in the graph. Hover for the OSDU kind and meaning.`;
+}
+
+// ---- knowledge graph: one wellbore --------------------------------------------------
+const KIND_STYLE = {Wellbore: {fill: "var(--ink)", r: 13}, Organisation: {fill: "#7a8794", r: 7}, Field: {fill: "#4f9d5d", r: 7},
+  Document: {fill: "#b9a13a", r: 7}, HoleSection: {fill: "#56697a", r: 9}, GeologicalFormation: {fill: "#c9ccd1", r: 8}, DrillingEvent: {fill: "#888", r: 4.5}};
+async function loadInstanceGraph() {
+  const g = await api("/api/graph", {name: state.well}), W = 900, H = 720, cx = W / 2, cy = H / 2;
+  const parentOf = Object.fromEntries(g.edges.filter(e => e.relation === "PART_OF").map(e => [e.source, e.target]));
+  const groupOf = id => { let cur = id, guard = 0; while (parentOf[cur] && guard++ < 6) cur = parentOf[cur]; return cur.replace(/^fm:/, ""); };
+  const nodes = g.nodes.map((n, i) => { const ring = {Wellbore: 0, HoleSection: 120, GeologicalFormation: 190, Document: 110, Organisation: 110, Field: 110, DrillingEvent: 290}[n.kind], a = i * 2.399963;
+    return {...n, x: cx + ring * Math.cos(a), y: cy + ring * Math.sin(a)}; });
+  const index = Object.fromEntries(nodes.map((n, i) => [n.id, i])), links = g.edges.map(e => ({...e, s: index[e.source], t: index[e.target]}));
+  const rest = e => e.relation === "IN_SECTION" || e.relation === "IN_FORMATION" ? 95 : e.relation === "PART_OF" ? 55 : 115;
+  for (let step = 0; step < 320; step++) { const k = .9 * (1 - step / 320) + .05;
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) { const a = nodes[i], b = nodes[j]; let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy || .01;
+      if (d2 > 90000) continue; const f = 900 / d2, d = Math.sqrt(d2); dx = dx / d * f * k * 6; dy = dy / d * f * k * 6; a.x += dx; a.y += dy; b.x -= dx; b.y -= dy; }
+    for (const l of links) { const a = nodes[l.s], b = nodes[l.t], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || .01, f = (d - rest(l)) / d * .06 * k * 6;
+      a.x += dx * f; a.y += dy * f; b.x -= dx * f; b.y -= dy * f; }
+    for (const n of nodes) { if (n.kind === "Wellbore") { n.x = cx; n.y = cy; continue; } n.x += (cx - n.x) * .004; n.y += (cy - n.y) * .004;
+      n.x = Math.max(24, Math.min(W - 24, n.x)); n.y = Math.max(20, Math.min(H - 20, n.y)); } }
+  let s = "";
+  for (const l of links) { const a = nodes[l.s], b = nodes[l.t];
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--muted)" stroke-width="${a.kind === "DrillingEvent" ? .6 : 1.2}" opacity="${a.kind === "DrillingEvent" ? .45 : .7}"><title>${esc(a.label)} ${l.relation} ${esc(b.label)}</title></line>`; }
+  for (const n of nodes) { const st = KIND_STYLE[n.kind], ev = n.kind === "DrillingEvent";
+    const fill = ev ? TYPES[n.event_type] : n.kind === "GeologicalFormation" ? stratColour(groupOf(n.id)) : st.fill, exact = !ev || n.depth_basis === "stated";
+    const tip = ev ? `${n.label} · ${n.depth_md == null ? "no depth" : fmt(n.depth_md) + " m"} (${basisText[n.depth_basis]})\n${n.description}` : `${n.kind}: ${n.label}`;
+    s += `<circle ${ev ? `data-id="${n.event_id}" style="cursor:pointer"` : ""} cx="${n.x}" cy="${n.y}" r="${st.r}" fill="${exact ? fill : "var(--panel)"}" stroke="${exact ? (n.kind === "GeologicalFormation" ? "rgba(0,0,0,.4)" : "var(--panel)") : fill}" stroke-width="${exact ? 1.2 : 1.8}"><title>${esc(tip)}</title></circle>`;
+    if (!ev) s += `<text x="${n.x + st.r + 3}" y="${n.y + 4}" font-size="${n.kind === "Wellbore" ? 13 : 10.5}" font-weight="${n.kind === "Wellbore" ? 700 : 500}" style="paint-order:stroke;stroke:var(--soft);stroke-width:3px">${esc(n.kind === "HoleSection" ? inches(parseFloat(n.label)) : n.label)}</text>`; }
+  $("instance").innerHTML = s;
+  for (const el of $("instance").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
+  const count = kind => g.nodes.filter(n => n.kind === kind).length;
+  $("instancetitle").textContent = `${g.wellbore} as a graph`;
+  $("instancelegend").innerHTML = [["Wellbore", "wellbore"], ["HoleSection", "hole section"], ["Document", "report"], ["Field", "field"], ["Organisation", "operator"]]
+    .filter(([k]) => count(k)).map(([k, t]) => `<span><i class="dot" style="background:${KIND_STYLE[k].fill}"></i>${t}</span>`).join("") +
+    `<span><i class="dot" style="background:${AGE["Upper Cretaceous"]};border:1px solid rgba(0,0,0,.4)"></i>group / formation, coloured by age</span><span><i class="dot" style="background:${TYPES.tight_hole}"></i>event, by type (hollow: depth from context)</span>`;
+  $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in. Click an event to read its source.`;
+}
+
+// ---- across wells -------------------------------------------------------------------
+async function loadMatrix() {
+  const m = await api("/api/matrix"), max = Math.max(1, ...m.rows.flatMap(r => Object.values(r.counts)));
+  $("matrix").innerHTML = `<tr><th>Formation group</th>${m.event_types.map(t => `<th class="heat" title="${label(t)}"><span class="dot" style="background:${TYPES[t]}"></span><br>${label(t).replace("wellbore ", "")}</th>`).join("")}<th class="num">Events</th><th class="num">Wells</th></tr>` +
+    m.rows.map(r => `<tr><td><i class="sw" style="background:${stratColour(r.group)}"></i> ${esc(r.group)}</td>${m.event_types.map(t => { const n = r.counts[t] || 0;
+      return `<td class="heat" style="background:color-mix(in srgb, ${TYPES[t]} ${Math.round(70 * n / max)}%, transparent)">${n || ""}</td>`; }).join("")}<td class="num">${r.total}</td><td class="num">${r.wells}</td></tr>`).join("");
+  $("matrixnote").textContent = `${m.wells_with_events} wellbores with events. An event is counted under the group at its depth; events with only a drilled interval are counted under the shallowest group of that interval. Cell shading is relative to the largest cell.`;
+}
+
+// ---- map ----------------------------------------------------------------------------
+const FIELD_COLOURS = {OIL: "#4f9d5d", GAS: "#c9584c", "OIL/GAS": "#d49a3a", "GAS/CONDENSATE": "#b0577f", "OIL/CONDENSATE": "#7a9a3c"};
+let map, wellLayer, blockLayer, mapBounds;
 async function initMap() {
-  map = L.map("map", {zoomSnap: .25, minZoom: 3, maxZoom: 13, attributionControl: true, preferCanvas: true})
-         .setView([61, 4], 5);
+  map = L.map("map", {zoomSnap: .25, minZoom: 3, maxZoom: 13, preferCanvas: true}).setView([61, 4], 5);
   map.attributionControl.setPrefix(false).addAttribution("Quadrants, blocks, fields, wells: SODIR (NLOD 2.0) · Land: Natural Earth");
   const get = name => fetch(`/static/geo/${name}.geojson`).then(r => r.json());
   const [land, quadrants, blocks, fields] = await Promise.all(["land", "quadrants", "blocks", "fields"].map(get));
   L.geoJSON(land, {interactive: false, style: {color: css("--grid"), weight: .6, fillColor: css("--land"), fillOpacity: 1}}).addTo(map);
-  blockLayer = L.geoJSON(blocks, {style: {color: css("--grid"), weight: .4, opacity: .55, fill: true, fillOpacity: 0},
-    onEachFeature: (f, l) => l.bindTooltip(`Block ${f.properties.name}`, {sticky: true})});
+  blockLayer = L.geoJSON(blocks, {style: {color: css("--grid"), weight: .4, opacity: .55, fill: true, fillOpacity: 0}, onEachFeature: (f, l) => l.bindTooltip(`Block ${f.properties.name}`, {sticky: true})});
   const labels = L.layerGroup();
   L.geoJSON(quadrants, {interactive: false, style: {color: css("--grid"), weight: .9, opacity: .8, fill: false},
-    onEachFeature: (f, l) => labels.addLayer(L.marker(l.getBounds().getCenter(), {interactive: false,
-      icon: L.divIcon({className: "qlabel", html: f.properties.name, iconSize: [40, 14]})}))}).addTo(map);
-  L.geoJSON(fields, {style: f => ({color: FIELD_COLOURS[f.properties.hc] || "#888", weight: .8,
-      fillColor: FIELD_COLOURS[f.properties.hc] || "#888", fillOpacity: .45}),
+    onEachFeature: (f, l) => labels.addLayer(L.marker(l.getBounds().getCenter(), {interactive: false, icon: L.divIcon({className: "qlabel", html: f.properties.name, iconSize: [40, 14]})}))}).addTo(map);
+  L.geoJSON(fields, {style: f => ({color: FIELD_COLOURS[f.properties.hc] || "#888", weight: .8, fillColor: FIELD_COLOURS[f.properties.hc] || "#888", fillOpacity: .45}),
     onEachFeature: (f, l) => l.bindTooltip(`${f.properties.name} · ${(f.properties.hc || "").toLowerCase()}`, {sticky: true})}).addTo(map);
   wellLayer = L.layerGroup().addTo(map);
-  const detail = () => {   // quadrant numbers when zoomed out a little, block outlines when zoomed in
-    map.getZoom() >= 5.5 ? labels.addTo(map) : labels.remove();
-    map.getZoom() >= 7 ? blockLayer.addTo(map).bringToBack() : blockLayer.remove();
-  };
+  const detail = () => { map.getZoom() >= 5.5 ? labels.addTo(map) : labels.remove(); map.getZoom() >= 7 ? blockLayer.addTo(map).bringToBack() : blockLayer.remove(); };
   map.on("zoomend", detail); detail();
 }
-
 function drawMap(origin, radiusKm, nearby, reportWells) {
   wellLayer.clearLayers();
-  const circle = L.circle([origin.lat, origin.lon], {radius: radiusKm * 1000, color: css("--ink"), weight: 1.2,
-    dashArray: "4 5", fill: false, interactive: false}).addTo(wellLayer);
-  const open = name => { $("well").value = name; state.well = name; state.selected = null; load(); };
+  const circle = L.circle([origin.lat, origin.lon], {radius: radiusKm * 1000, color: css("--ink"), weight: 1.2, dashArray: "4 5", fill: false, interactive: false}).addTo(wellLayer);
   const near = new Set(nearby.map(w => w.name));
-  for (const w of nearby.filter(w => w.lat != null).sort((a, b) => a.events - b.events)) {
-    const has = w.events > 0;
-    const m = L.circleMarker([w.lat, w.lon], has
-      ? {radius: 5 + Math.sqrt(w.events) * .7, color: css("--panel"), weight: 1.2, fillColor: css("--accent"), fillOpacity: .95}
+  for (const w of nearby.filter(w => w.lat != null).sort((a, b) => a.events - b.events)) { const has = w.events > 0;
+    const m = L.circleMarker([w.lat, w.lon], has ? {radius: 5 + Math.sqrt(w.events) * .7, color: css("--panel"), weight: 1.2, fillColor: css("--accent"), fillOpacity: .95}
       : {radius: 3, stroke: false, fillColor: css("--muted"), fillOpacity: .55}).addTo(wellLayer);
     m.bindTooltip(`${w.name} · ${fmt(w.distance_km, 1)} km${w.operator ? " · " + w.operator : ""}${has ? ` · ${w.events} events` : ""}`);
-    if (has) { m.on("click", () => open(w.name));
-      L.marker([w.lat, w.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(w.name), iconSize: [0, 0], iconAnchor: [-9, 8]})}).addTo(wellLayer); }
-  }
-  for (const w of reportWells) {   // wells with reports elsewhere on the shelf: visible when zoomed out
-    if (near.has(w.name) || w.name === origin.name || w.lat == null) continue;
-    L.circleMarker([w.lat, w.lon], {radius: 5, color: css("--panel"), weight: 1, fillColor: css("--accent"), fillOpacity: .8})
-      .bindTooltip(`${w.name} · ${w.events} events`).on("click", () => open(w.name)).addTo(wellLayer);
-  }
-  L.circleMarker([origin.lat, origin.lon], {radius: 7, color: css("--panel"), weight: 2, fillColor: css("--ink"), fillOpacity: 1})
-    .bindTooltip(origin.name).addTo(wellLayer);
+    if (has) { m.on("click", () => openWell(w.name));
+      L.marker([w.lat, w.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(w.name), iconSize: [0, 0], iconAnchor: [-9, 8]})}).addTo(wellLayer); } }
+  for (const w of reportWells) { if (near.has(w.name) || w.name === origin.name || w.lat == null) continue;
+    L.circleMarker([w.lat, w.lon], {radius: 5, color: css("--panel"), weight: 1, fillColor: css("--accent"), fillOpacity: .8}).bindTooltip(`${w.name} · ${w.events} events`).on("click", () => openWell(w.name)).addTo(wellLayer); }
+  L.circleMarker([origin.lat, origin.lon], {radius: 7, color: css("--panel"), weight: 2, fillColor: css("--ink"), fillOpacity: 1}).bindTooltip(origin.name).addTo(wellLayer);
   L.marker([origin.lat, origin.lon], {interactive: false, icon: L.divIcon({className: "wlabel", html: esc(origin.name), iconSize: [0, 0], iconAnchor: [-11, 8]})}).addTo(wellLayer);
-  map.fitBounds(circle.getBounds(), {padding: [14, 14]});
+  mapBounds = circle.getBounds(); map.invalidateSize(); map.fitBounds(mapBounds, {padding: [14, 14]});
 }
-
 async function loadOffsets() {
-  const [near, off, reports] = await Promise.all([
-    api("/api/wells", {near: state.well, radius_km: state.radius, limit: 200}),
-    api("/api/offset", {near: state.well, radius_km: state.radius}),
-    api("/api/report_wells")]);
-  const o = near.origin, R = state.radius, k = Math.cos(o.lat * Math.PI / 180);
-  // the list is capped at the 200 nearest: make sure every well with a report is on the map
-  const have = new Set(near.results.map(w => w.name));
-  for (const w of reports.results) {
-    if (w.name === o.name || have.has(w.name) || w.lat == null) continue;
-    const dx = (w.lon - o.lon) * 111.32 * k, dy = (w.lat - o.lat) * 110.57, dist = Math.hypot(dx, dy);
-    if (dist <= R) near.results.push({...w, distance_km: dist});
-  }
+  const [near, off, reports] = await Promise.all([api("/api/wells", {near: state.well, radius_km: state.radius, limit: 200}),
+    api("/api/offset", {near: state.well, radius_km: state.radius}), api("/api/report_wells")]);
+  const o = near.origin, R = state.radius, k = Math.cos(o.lat * Math.PI / 180), have = new Set(near.results.map(w => w.name));
+  for (const w of reports.results) { if (w.name === o.name || have.has(w.name) || w.lat == null) continue;
+    const dist = Math.hypot((w.lon - o.lon) * 111.32 * k, (w.lat - o.lat) * 110.57); if (dist <= R) near.results.push({...w, distance_km: dist}); }
   drawMap(o, R, near.results, reports.results);
   const withEvents = near.results.filter(w => w.events > 0).length;
-  $("maplegend").textContent = `${near.total} wellbores within ${R} km; ${withEvents} of them have a report with events loaded (blue, click to open). Grey: backbone only.`;
+  $("maplegend").textContent = `${near.total} wellbores within ${R} km of ${o.name}; ${withEvents} of them have a report with events loaded (blue, click to open). Grey: backbone only.`;
+  $("nearbytitle").textContent = `What happened in other wells within ${R} km of ${o.name}`;
   $("offset").innerHTML = off.summary.length
-    ? `<tr><th>Event</th><th>Hole</th><th class="num">Events</th><th class="num">Wells</th><th class="num">Mud weight, sg</th><th class="num">Depth, m</th></tr>` +
-      off.summary.slice(0, 14).map(r => `<tr><td><span class="dot" style="background:${TYPES[r.event_type]}"></span> ${label(r.event_type)}</td>
-        <td>${r.hole_diameter_in ? inches(r.hole_diameter_in) : "–"}</td><td class="num">${r.events}</td><td class="num">${r.wells}</td>
+    ? `<tr><th>Event</th><th>Hole</th><th class="num">Events</th><th class="num">Wells</th><th class="num">Mud weight, sg</th><th class="num">Depth, m</th><th>Wellbores</th></tr>` +
+      off.summary.map(r => `<tr><td><span class="dot" style="background:${TYPES[r.event_type]}"></span> ${label(r.event_type)}</td><td>${r.hole_diameter_in ? inches(r.hole_diameter_in) : "–"}</td>
+        <td class="num">${r.events}</td><td class="num">${r.wells}</td>
         <td class="num">${r.min_mud_weight_sg == null ? "–" : fmt(r.min_mud_weight_sg, 2) + (r.max_mud_weight_sg > r.min_mud_weight_sg ? "–" + fmt(r.max_mud_weight_sg, 2) : "")}</td>
-        <td class="num">${r.shallowest_md == null ? "–" : fmt(r.shallowest_md) + "–" + fmt(r.deepest_md)}</td></tr>`).join("")
-    : `<tr><td class="muted">No events in other wells within ${R} km${off.note ? ": " + esc(off.note) : "."}</td></tr>`;
+        <td class="num">${r.shallowest_md == null ? "–" : fmt(r.shallowest_md) + "–" + fmt(r.deepest_md)}</td><td>${r.wellbores.map(esc).join(", ")}</td></tr>`).join("")
+    : `<tr><td class="muted">No events in other wells within ${R} km${off.note ? ": " + esc(off.note) : "."} Try a larger radius.</td></tr>`;
 }
 init();
 </script>

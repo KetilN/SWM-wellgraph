@@ -122,6 +122,15 @@ class GraphStore:
         else:
             self._con.execute("create table mud_check (wellbore_id BIGINT, md DOUBLE, "
                               "mud_weight_sg DOUBLE)")
+        daily = self.directory / "daily_report.parquet"
+        if daily.is_file():
+            escaped = str(daily).replace("'", "''")
+            self._con.execute(
+                f"create view daily_report as select * from read_parquet('{escaped}')")
+        else:
+            self._con.execute("create table daily_report (wellbore_id BIGINT, report_date DATE, "
+                              "depth_md DOUBLE, mud_weight_sg DOUBLE, operations VARCHAR, "
+                              "page_no INTEGER, row_index INTEGER)")
         self._con.execute(
             """
             create macro haversine_km(lat1, lon1, lat2, lon2) as
@@ -276,6 +285,42 @@ class GraphStore:
             "and md is not null and mud_weight_sg between 0.9 and 2.6 order by md",
             [wid],
         )
+
+    def daily_rows(self, wellbore: str) -> dict[str, Any]:
+        """Daily drilling report rows of one wellbore, in date order (for a time-depth curve)."""
+        wb = self.resolve_wellbore(wellbore)
+        rows = self._rows(
+            "select report_date, depth_md, mud_weight_sg, operations from daily_report "
+            "where wellbore_id = ? and report_date is not null "
+            "order by report_date, page_no, row_index",
+            [wb["wellbore_id"]],
+        )
+        return {"wellbore": wb["name"], "rows": rows}
+
+    def event_matrix(self) -> dict[str, Any]:
+        """Events across all wells, counted by formation group and event type."""
+        rows = self._rows(
+            """
+            select coalesce(e.formations[1], '(no formation)') as grp, e.event_type,
+                   count(*) as n, count(distinct e.wellbore_id) as wells
+            from event e group by 1, 2
+            """
+        )
+        wells = {r["grp"]: r["n"] for r in self._rows(
+            "select coalesce(formations[1], '(no formation)') as grp, "
+            "count(distinct wellbore_id) as n from event group by 1")}
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            entry = out.setdefault(r["grp"], {"group": r["grp"], "counts": {}, "total": 0,
+                                              "wells": wells[r["grp"]]})
+            entry["counts"][r["event_type"]] = r["n"]
+            entry["total"] += r["n"]
+        present = {t for e in out.values() for t in e["counts"]}
+        return {
+            "event_types": [t for t in EVENT_TYPES if t in present],
+            "rows": sorted(out.values(), key=lambda e: -e["total"]),
+            "wells_with_events": self._scalar("select count(distinct wellbore_id) from event"),
+        }
 
     def table_rows(self, table: str) -> int | None:
         """Row count of a graph table, including ones the tools do not read; None if absent."""

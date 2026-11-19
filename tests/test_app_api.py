@@ -114,3 +114,21 @@ def test_ontology_endpoint_returns_rings_and_row_counts(client):
     assert {"core", "observed", "planned"} == {e["ring"] for e in o["entities"]}
     names = set(entities)
     assert all(r["from"] in names and r["to"] in names for r in o["relationships"])
+
+
+# --- views added in the UI round ------------------------------------------------------
+
+def test_event_matrix_counts_events_by_group_and_type_across_wells(client):
+    m = client.get("/api/matrix").json()
+    assert set(m["event_types"]) >= {"lost_circulation", "kick", "tight_hole", "pack_off"}
+    rows = {r["group"]: r for r in m["rows"]}
+    assert rows["SHETLAND GP"]["counts"]["lost_circulation"] == 3
+    assert rows["SHETLAND GP"]["wells"] == 3
+    assert rows["(no formation)"]["counts"]["kick"] == 1
+    assert m["wells_with_events"] == 3
+
+
+def test_daily_rows_endpoint_is_empty_but_valid_without_the_table(client):
+    d = client.get("/api/daily", params={"name": "99/1-1"}).json()
+    assert d == {"wellbore": "99/1-1", "rows": []}
+    assert client.get("/api/daily").status_code == 400
