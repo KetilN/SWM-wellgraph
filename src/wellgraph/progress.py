@@ -29,7 +29,7 @@ STAGES = ["backbone", "documents", "extract", "depth_pass", "daily_reports", "co
 LABELS = {
     "backbone": "Backbone tables (SODIR)",
     "documents": "Read reports",
-    "extract": "Extract events (model calls)",
+    "extract": "Extract drilling events (model calls)",
     "depth_pass": "Second depth pass (model calls)",
     "daily_reports": "Daily reports",
     "core": "Core data",
