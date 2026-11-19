@@ -88,11 +88,11 @@ src/wellgraph/
   onboard/      read report JSONs, load SODIR and Diskos tables
   extract/      page routing, event schema, model client
   resolve/      wellbore names to NPD ids, depth to hole section and formation
-  graph/        table contract and read-only store
+  graph/        graph build and read-only store
   mcp_server/   the six tools
 samples/        four report JSONs to try the pipeline on
-ontology.yaml   entity and relationship types (placeholder)
-schema.yaml     tables and columns (placeholder)
+ontology.yaml   what exists: entity and relationship types, OSDU kinds
+schema.yaml     how it is stored: tables, columns, types, units
 docs/           plan and design notes
 ```
 

@@ -184,7 +184,8 @@ Next, in order:
 ```
 data/                     derived files only, git-ignored (factpages/, staging/, kg/)
 ontology.yaml             entity / relationship types: core ring + planned ring (draft)
-schema.yaml               tables, columns, units (placeholder)
+schema.yaml               the table contract: tables, columns, types, units, enums
+                          (loaded by src/wellgraph/graph/schema.py)
 samples/reports/          four report JSONs (25/6, 25/7) for trying the pipeline
 src/wellgraph/
   onboard/      report reader, SODIR + Diskos loaders

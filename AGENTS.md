@@ -30,7 +30,8 @@ example `15/9-19 A`.
 - Read `docs/PLAN.md` for goals, decisions and open questions.
 - Python 3.12 with `uv`. Run `uv run pytest` before and after a change.
 - Tests come first for deterministic code.
-- `src/wellgraph/graph/schema.py` is the contract between the graph build and the
-  server. Change it deliberately, with its tests.
+- `schema.yaml` is the contract between the graph build and the server (loaded by
+  `src/wellgraph/graph/schema.py`); `ontology.yaml` is the conceptual model. Change
+  them deliberately, with their tests.
 - Never commit anything under `data/`. Never commit secrets; configuration goes in `.env`
   (see `.env.example`).

@@ -5,8 +5,8 @@
 Raw CSVs are cached in `--raw` (one file per FactPages table, never re-downloaded unless
 `--force`). The transforms are pure: a directory of CSVs in, DataFrames / Parquet out.
 Output tables `wellbore`, `formation_top` and `hole_section` follow
-`wellgraph.graph.schema.TABLES` exactly; `mud_check` and `formation` are extra tables
-described by `EXTRA_TABLES` below.
+`wellgraph.graph.schema.TABLES` exactly; `mud_check` and `formation` are the
+`extra_tables` of schema.yaml (`wellgraph.graph.schema.EXTRA_TABLES`).
 
 What the real exports look like (checked 2026-11-19), and what is done about it:
 - UTF-8 with BOM, comma separated, quoted multi-line text. Dates are `DD.MM.YYYY`;
@@ -41,7 +41,7 @@ import duckdb
 import httpx
 import pandas as pd
 
-from wellgraph.graph.schema import TABLES
+from wellgraph.graph.schema import EXTRA_TABLES, TABLES
 
 log = logging.getLogger(__name__)
 
@@ -71,28 +71,7 @@ MAX_TABLE_BYTES = 50 * 1024 * 1024
 
 SCHEMA_TABLES = ("wellbore", "formation_top", "hole_section")
 
-# Tables not (yet) in graph/schema.py: table -> {column: DuckDB type}
-EXTRA_TABLES: dict[str, dict[str, str]] = {
-    # SODIR wellbore_mud: mud properties reported at a depth
-    "mud_check": {
-        "wellbore_id": "BIGINT",
-        "md": "DOUBLE",  # metres
-        "mud_weight_sg": "DOUBLE",
-        "viscosity_mpas": "DOUBLE",  # SODIR "viscosity [mPa.s]"
-        "yield_point_pa": "DOUBLE",  # SODIR "yield point [Pa]"
-        "mud_type": "VARCHAR",  # free text, as written by SODIR
-        "date_measured": "DATE",
-    },
-    # SODIR strat_litho_overview: the lithostratigraphic units and their hierarchy
-    "formation": {
-        "formation_id": "BIGINT",  # lsuNpdidLithoStrat
-        "name": "VARCHAR",  # e.g. "TOR FM", same spelling as formation_top.formation
-        "level": "VARCHAR",  # GROUP | SUBGROUP | FORMATION | MEMBER
-        "parent": "VARCHAR",
-        "parent_id": "BIGINT",
-        "factpage_url": "VARCHAR",
-    },
-}
+# mud_check and formation are defined under extra_tables in schema.yaml (imported above).
 
 MUD_TYPE_PLACEHOLDERS = {"DUMMY"}
 

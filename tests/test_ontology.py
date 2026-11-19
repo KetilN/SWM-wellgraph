@@ -2,8 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from wellgraph.graph.schema import TABLES
-from wellgraph.onboard.sodir import EXTRA_TABLES
+from wellgraph.graph.schema import EXTRA_TABLES, TABLES
 
 ONTOLOGY = yaml.safe_load((Path(__file__).parent.parent / "ontology.yaml").read_text())
 ENTITIES = ONTOLOGY["entities"]

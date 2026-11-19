@@ -1,15 +1,170 @@
-# wellgraph data schema: the tables (Parquet files) that make up the published graph,
-# with their columns, types and units.
+# wellgraph data schema: how the knowledge graph is stored.
 #
-# STATUS: placeholder. Not agreed yet; nothing reads this file.
+# The published graph is a folder of Parquet files, one per table, named <table>.parquet.
+# This file is the single source of truth for those tables: the graph build writes them
+# in this shape and the MCP server refuses a file that lacks a listed column.
+# src/wellgraph/graph/schema.py loads this file; do not repeat column lists in code.
 #
 # How it relates to ontology.yaml:
-#   ontology.yaml  says WHAT exists (entity and relationship types, OSDU kinds)
-#   schema.yaml    says HOW it is stored (one table per type, columns, types, units, keys)
+#   ontology.yaml  WHAT exists: entity and relationship types, meaning, OSDU kind
+#   schema.yaml    HOW it is stored: tables, columns, types, units, keys
 #
-# Until this file is filled in, the working contract used by the MCP server lives in
-# src/wellgraph/graph/schema.py (provisional). When this file is agreed, that module
-# should load it so there is one source of truth.
+# Column types are DuckDB / Parquet types. Units: depths in metres, densities in specific
+# gravity (sg), diameters in inches, coordinates in decimal degrees.
+#
+# tables        read by the MCP server. A missing file is treated as an empty table.
+# extra_tables  built and published, not yet read by the server.
 
-version: 0
-tables: {}
+version: 1
+
+tables:
+
+  wellbore:
+    entity: Wellbore
+    source: SODIR FactPages wellbore tables
+    key: [wellbore_id]
+    columns:
+      wellbore_id: {type: BIGINT, description: NPD wellbore id (wlbNpdidWellbore)}
+      name: {type: VARCHAR, description: "SODIR wellbore name, e.g. 15/9-19 A"}
+      well_name: {type: VARCHAR, description: Name of the well the wellbore belongs to}
+      wellbore_type: {type: VARCHAR, description: "EXPLORATION, DEVELOPMENT or OTHER (shallow, soil, scientific)"}
+      purpose: {type: VARCHAR, description: "As written by SODIR, e.g. WILDCAT, APPRAISAL, PRODUCTION"}
+      operator: {type: VARCHAR, description: Drilling operator}
+      field: {type: VARCHAR, description: Field name}
+      drilling_facility: {type: VARCHAR, description: Rig or platform that drilled it}
+      entry_date: {type: DATE, description: Spud date}
+      completion_date: {type: DATE, description: Date drilling was completed}
+      total_depth_md: {type: DOUBLE, unit: m, description: Total depth, measured depth}
+      water_depth: {type: DOUBLE, unit: m, description: Water depth at the location}
+      lat: {type: DOUBLE, unit: degrees, description: Latitude, decimal degrees}
+      lon: {type: DOUBLE, unit: degrees, description: Longitude, decimal degrees}
+      factpage_url: {type: VARCHAR, description: SODIR FactPages link}
+
+  formation_top:
+    relationship: PENETRATES
+    source: SODIR wellbore formation tops
+    key: [wellbore_id, formation, top_md]
+    columns:
+      wellbore_id: {type: BIGINT, description: NPD wellbore id}
+      formation: {type: VARCHAR, description: "SODIR unit name, e.g. SHETLAND GP"}
+      level: {type: VARCHAR, description: "GROUP, SUBGROUP, FORMATION or MEMBER"}
+      parent: {type: VARCHAR, description: Name of the parent unit}
+      top_md: {type: DOUBLE, unit: m, description: Top of the unit, measured depth}
+      base_md: {type: DOUBLE, unit: m, description: Base of the unit, measured depth}
+
+  hole_section:
+    entity: HoleSection
+    source: SODIR casing and leak-off table
+    key: [wellbore_id, base_md]
+    columns:
+      wellbore_id: {type: BIGINT, description: NPD wellbore id}
+      hole_diameter_in: {type: DOUBLE, unit: in, description: Hole diameter}
+      base_md: {type: DOUBLE, unit: m, description: Depth the section was drilled to; null when SODIR has no value}
+      casing_type: {type: VARCHAR, description: "As written by SODIR, e.g. CONDUCTOR, SURF.COND., INTERM., LINER"}
+      casing_diameter_in: {type: DOUBLE, unit: in, description: Casing outer diameter}
+      casing_depth_md: {type: DOUBLE, unit: m, description: Casing shoe depth}
+      lot_mud_density_sg: {type: DOUBLE, unit: sg, description: Leak-off / formation integrity test value at the shoe}
+
+  document:
+    entity: Document
+    source: Diskos end-of-well reports (report JSON metadata)
+    key: [document_id]
+    columns:
+      document_id: {type: VARCHAR, description: Diskos wellbore file id}
+      wellbore_id: {type: BIGINT, description: NPD wellbore id, resolved from the report's wellbore name}
+      title: {type: VARCHAR, description: Report title}
+      relative_path: {type: VARCHAR, description: Path of the PDF inside the Zenodo archive}
+      n_pages: {type: INTEGER, description: Number of pages}
+
+  page:
+    entity: Page
+    source: report JSON pages
+    key: [document_id, page_no]
+    columns:
+      document_id: {type: VARCHAR, description: Document the page belongs to}
+      page_no: {type: INTEGER, description: "Page index, 0-based as in the report JSON"}
+      text: {type: VARCHAR, description: OCR text of the page as markdown}
+      summary: {type: VARCHAR, description: Machine-written summary of the page}
+      quality: {type: VARCHAR, description: "Reliable, Acceptable, Uncertain or Figure-dominated"}
+
+  event:
+    entity: DrillingEvent
+    source: extracted from report pages by a language model, then depth-joined
+    key: [event_id]
+    columns:
+      event_id: {type: VARCHAR, description: Stable id derived from document, page, type and depths}
+      wellbore_id: {type: BIGINT, description: NPD wellbore id}
+      event_type: {type: VARCHAR, description: One of event_types}
+      top_md: {type: DOUBLE, unit: m, description: Top of the affected interval (see depth_ref)}
+      base_md: {type: DOUBLE, unit: m, description: Base of the affected interval (see depth_ref)}
+      mud_weight_sg: {type: DOUBLE, unit: sg, description: Mud weight converted to specific gravity}
+      hole_diameter_in: {type: DOUBLE, unit: in, description: "From a depth join against hole_section; null for TVD depths"}
+      formations: {type: "VARCHAR[]", description: "Every unit, any level, containing the depth; from a depth join against formation_top"}
+      description: {type: VARCHAR, description: What happened}
+      remedy: {type: VARCHAR, description: What was done about it}
+      lesson: {type: VARCHAR, description: Lesson learned, when the report states one}
+      document_id: {type: VARCHAR, description: Source report}
+      page_no: {type: INTEGER, description: "Source page, 0-based"}
+      text_span: {type: VARCHAR, description: Verbatim quote from the page}
+      confidence: {type: DOUBLE, description: Extraction confidence, 0 to 1}
+      depth_ref: {type: VARCHAR, description: One of depth_refs}
+      mud_weight_raw: {type: VARCHAR, description: "Mud weight as written in the report, e.g. 10.5 ppg"}
+      mud_weight_kind: {type: VARCHAR, description: One of mud_weight_kinds}
+
+extra_tables:
+
+  mud_check:
+    entity: MudCheck
+    source: SODIR wellbore mud table
+    columns:
+      wellbore_id: {type: BIGINT, description: NPD wellbore id}
+      md: {type: DOUBLE, unit: m, description: Measured depth of the check}
+      mud_weight_sg: {type: DOUBLE, unit: sg, description: Mud weight}
+      viscosity_mpas: {type: DOUBLE, description: "Viscosity; unit (mPa.s) not confirmed against SODIR"}
+      yield_point_pa: {type: DOUBLE, description: "Yield point; unit (Pa) not confirmed against SODIR"}
+      mud_type: {type: VARCHAR, description: Free text as written by SODIR}
+      date_measured: {type: DATE, description: Date of the measurement}
+
+  formation:
+    entity: GeologicalFormation
+    source: SODIR lithostratigraphy overview
+    key: [formation_id]
+    columns:
+      formation_id: {type: BIGINT, description: NPD lithostratigraphic unit id}
+      name: {type: VARCHAR, description: "Unit name, same spelling as formation_top.formation"}
+      level: {type: VARCHAR, description: "GROUP, SUBGROUP, FORMATION or MEMBER"}
+      parent: {type: VARCHAR, description: Name of the parent unit}
+      parent_id: {type: BIGINT, description: Id of the parent unit}
+      factpage_url: {type: VARCHAR, description: SODIR FactPages link}
+
+enums:
+
+  event_types:
+    lost_circulation: Mud lost to the formation
+    kick: Influx of formation fluid into the well
+    stuck_pipe: String stuck in the hole
+    tight_hole: Overpull, drag or reaming needed to pass a spot
+    wellbore_instability: Cavings, sloughing or hole collapse
+    pack_off: Hole packing off around the string (not the wellhead pack-off seal)
+    washout: Enlarged hole or washed-out string
+    fishing: Fishing job, twist-off or equipment lost in hole
+    sidetrack: Unplanned sidetrack forced by a hole problem
+    other: A drilling problem that fits none of the above
+
+  depth_refs:
+    MD: Stated as measured depth
+    TVD: Stated as true vertical depth; not joined against measured-depth tables
+    TVDSS: Stated as true vertical depth subsea; not joined against measured-depth tables
+    ASSUMED_MD: No reference written in the report; treated as measured depth
+
+  mud_weight_kinds:
+    mud_in_hole: Static mud weight in use when the event happened
+    ecd: Equivalent circulating density
+    unknown: The report does not say
+
+source:
+  doi: 10.5281/zenodo.24320092
+  url: https://zenodo.org/records/24320092
+  attribution: >-
+    Reports: ConocoPhillips / Diskos, Zenodo record 24320092, CC BY 4.0.
+    Backbone: SODIR FactPages (NLOD 2.0).
