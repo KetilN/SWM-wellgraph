@@ -54,6 +54,19 @@ Then connect to `http://localhost:7860/mcp`. A public hosted endpoint is planned
 The agent needs no other documentation: the server's instructions and the
 `describe_graph` tool tell it what the graph holds and how to query it.
 
+## Look at it in a browser
+
+The same server has a small page for people: an offset map, a depth strip for one
+wellbore (formations, hole sections, mud weight, events) and the report text behind each
+event.
+
+```bash
+PYTHONPATH=src uv run python -m wellgraph.mcp_server --http --port 7860
+```
+
+Open `http://localhost:7860/`. The page reads the same graph as the MCP tools, through
+JSON endpoints under `/api/`.
+
 ## Tools
 
 | Tool | What it does |
@@ -90,6 +103,7 @@ src/wellgraph/
   resolve/      wellbore names to NPD ids, depth to hole section and formation
   graph/        graph build and read-only store
   mcp_server/   the six tools
+  app/          small web page and JSON API on the same server
 samples/        four report JSONs to try the pipeline on
 ontology.yaml   what exists: entity and relationship types, OSDU kinds
 schema.yaml     how it is stored: tables, columns, types, units

@@ -114,6 +114,14 @@ class GraphStore:
             else:
                 cols = ", ".join(f"{c} {t}" for c, t in columns.items())
                 self._con.execute(f"create table {table} ({cols})")
+        # mud_check is an extra table (not required by the tools); the app's strip chart uses it
+        mud = self.directory / "mud_check.parquet"
+        if mud.is_file():
+            escaped = str(mud).replace("'", "''")
+            self._con.execute(f"create view mud_check as select * from read_parquet('{escaped}')")
+        else:
+            self._con.execute("create table mud_check (wellbore_id BIGINT, md DOUBLE, "
+                              "mud_weight_sg DOUBLE)")
         self._con.execute(
             """
             create macro haversine_km(lat1, lon1, lat2, lon2) as
@@ -247,6 +255,27 @@ class GraphStore:
             "note": None if counts["event"] else NO_EVENTS_NOTE,
             "attribution": ATTRIBUTION,
         }
+
+    def report_wells(self) -> list[dict[str, Any]]:
+        """Wellbores that have at least one report loaded, with their event counts."""
+        return self._rows(
+            """
+            select w.name, w.wellbore_id, w.wellbore_type, w.operator, w.field, w.lat, w.lon,
+                   w.total_depth_md, count(distinct d.document_id) as documents,
+                   (select count(*) from event e where e.wellbore_id = w.wellbore_id) as events
+            from wb w join document d using (wellbore_id)
+            group by all order by w.name
+            """
+        )
+
+    def mud_profile(self, wellbore: str) -> list[dict[str, Any]]:
+        """SODIR mud weight measurements for one wellbore, by depth."""
+        wid = self.resolve_wellbore(wellbore)["wellbore_id"]
+        return self._rows(
+            "select md, mud_weight_sg from mud_check where wellbore_id = ? "
+            "and md is not null and mud_weight_sg between 0.9 and 2.6 order by md",
+            [wid],
+        )
 
     def find_wells(
         self,

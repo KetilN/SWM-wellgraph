@@ -11,6 +11,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from wellgraph.app.routes import register as register_app
 from wellgraph.graph.schema import ATTRIBUTION, EVENT_TYPES
 from wellgraph.graph.store import DEFAULT_LIMIT, MAX_LIMIT, GraphStore, NotFound
 
@@ -89,6 +90,7 @@ def default_kg_dir() -> Path:
 def build_server(kg_dir: str | Path | None = None) -> FastMCP:
     store = GraphStore(kg_dir if kg_dir is not None else default_kg_dir())
     mcp = FastMCP(name="wellgraph", instructions=INSTRUCTIONS)
+    register_app(mcp, store)  # small web page and JSON API next to /mcp (HTTP only)
 
     def guarded(fn, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Turn bad input into a message the agent can act on, never a stack trace."""
