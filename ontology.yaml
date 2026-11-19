@@ -216,8 +216,8 @@ entities:
     ring: observed
     status: observed
     osdu_kind: work-product-component--WellboreIntervalSet
-    seen_in: {pages: 217, reports: 7}
-    description: Cuttings and sidewall-core descriptions by depth interval.
+    seen_in: {pages: 332, reports: 7}
+    description: Cuttings and wellsite sample descriptions by depth interval.
     would_enable: lithology at an event depth, finer than formation tops
 
   LessonLearned:
@@ -248,6 +248,50 @@ entities:
     seen_in: {pages: 46, reports: 6}
     description: Site-survey prediction of shallow gas and what was observed while drilling.
     would_enable: shallow hazard lookup around a planned location
+
+  PetrophysicalEvaluation:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 49, reports: 7}
+    description: >
+      Log-analysis results per interval: net pay, average porosity, water saturation,
+      net-to-gross. No OSDU kind confirmed.
+    would_enable: reservoir quality by formation across wells; real values for the planned petrophysical model
+
+  HydrocarbonShow:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 219, reports: 6}
+    description: >
+      Gas readings and shows while drilling: total and peak gas, chromatograph components
+      (C1 to C4), fluorescence. No OSDU kind confirmed.
+    would_enable: where hydrocarbons and gas peaks were seen, by depth; context for kicks
+
+  SampleProgramme:
+    ring: observed
+    status: observed
+    osdu_kind: master-data--Sample
+    seen_in: {pages: 61, reports: 5}
+    description: Which cuttings, sidewall cores and fluid samples were taken at which depths, and where they went.
+    would_enable: finding physical samples for an interval
+
+  MaterialConsumption:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 31, reports: 6}
+    description: Mud products used and their cost per hole section.
+    would_enable: mud cost per section, and LCM volumes as a cross-check on loss events
+
+  WellheadAndCompletionEquipment:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 105, reports: 7}
+    description: Wellhead, tree and completion string components, often as schematics.
+    would_enable: the as-built completion of development wells
 
   # -------------------------------------------------------------------------- planned
   # From the SWM schema proposal. Names in "proposal_name" are the proposal's own.
@@ -450,7 +494,13 @@ relationships:
   DRAWN_FROM: {from: LessonLearned, to: DrillingEvent, ring: observed}
   TIME_SPENT_IN: {from: TimeBreakdown, to: Wellbore, ring: observed}
   ASSESSES: {from: ShallowGasAssessment, to: Wellbore, ring: observed}
+  EVALUATES: {from: PetrophysicalEvaluation, to: GeologicalFormation, ring: observed}
+  SHOW_IN: {from: HydrocarbonShow, to: Wellbore, ring: observed}
+  SAMPLED_FROM: {from: SampleProgramme, to: Wellbore, ring: observed}
+  CONSUMED_IN: {from: MaterialConsumption, to: HoleSection, ring: observed}
+  INSTALLED_IN: {from: WellheadAndCompletionEquipment, to: Wellbore, ring: observed}
   # links from the observed ring to the planned ring
+  MEASURES: {from: PetrophysicalEvaluation, to: PetrophysicalModel, ring: observed, note: link to the planned ring}
   ACQUIRES: {from: LoggingRun, to: WellLog, ring: observed, note: link to the planned ring}
   CALIBRATES: {from: Core, to: PetrophysicalModel, ring: observed, note: link to the planned ring}
 

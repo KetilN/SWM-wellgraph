@@ -68,7 +68,7 @@ Group in the 12 1/4 in section, and at what mud weight?"
   states them, use that only as a cross-check.
 - Ontology is small and hand-written in `ontology.yaml`. The LLM never invents schema; it
   fills it. `ontology.yaml` is a draft with three rings: core (what the graph holds,
-  checked against the table contract by `tests/test_ontology.py`), observed (15 kinds
+  checked against the table contract by `tests/test_ontology.py`), observed (20 kinds
   of content the reports contain but the graph does not extract yet, with page counts
   from the 7 samples), and planned (the wider SWM proposal: well data, seismic, geology;
   no data source connected).
