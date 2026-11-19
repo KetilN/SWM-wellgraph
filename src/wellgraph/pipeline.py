@@ -28,6 +28,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from wellgraph import progress
 from wellgraph.extract.daily import build_daily_reports
 from wellgraph.extract.depth_pass import resolve_depths
 from wellgraph.extract.run import LLMClient, OfflineClient, OpenAICompatibleClient, extract_events
@@ -72,7 +73,9 @@ def run_pipeline(
         kg_dir, client, cache_dir / "extract", max_pages_per_report, wellbores, False, workers
     )
     stats["depth_pass"] = resolve_depths(kg_dir, client, cache_dir / "depth", workers)
+    progress.report("daily_reports", force=True)
     stats["daily_reports"] = build_daily_reports(kg_dir)
+    progress.report("core", force=True)
     if core_xlsx is not None and Path(core_xlsx).is_file():
         stats["core"] = {
             "samples": build_core_samples(core_xlsx, kg_dir, all_wellbores=core_all_wellbores),
@@ -100,16 +103,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="Load core data for every well, not only wells with a report.")
     parser.add_argument("--diskos-csv", default=str(DEFAULT_CSV),
                         help="Diskos metadata CSV; fills report type, company and dates.")
+    parser.add_argument("--progress", metavar="FILE",
+                        help="Write progress to this JSON file (see wellgraph.progress).")
     parser.add_argument("--offline", metavar="MODEL",
                         help="Rebuild from cached replies of MODEL; no model calls.")
     args = parser.parse_args(argv)
     if not args.reports:
         parser.error("give --reports or set WELLGRAPH_DATA_DIR")
+    if args.progress:
+        os.environ["WELLGRAPH_PROGRESS"] = args.progress
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     client = OfflineClient(args.offline) if args.offline else OpenAICompatibleClient.from_env()
     stats = run_pipeline(args.reports, args.kg, client, args.cache, args.raw,
                          args.download_backbone, args.max_pages, args.wellbore, args.workers,
                          args.core_xlsx, args.core_all, args.diskos_csv)
+    progress.report("done", force=True)
     print(json.dumps(stats, indent=2, default=str))
     return 0
 

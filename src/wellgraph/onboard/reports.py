@@ -38,6 +38,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from wellgraph import progress
+
 log = logging.getLogger(__name__)
 
 DOCUMENT_STAGING_COLUMNS: dict[str, str] = {
@@ -170,11 +172,14 @@ def iter_report_paths(root: str | os.PathLike) -> Iterator[Path]:
 
 def iter_reports(root: str | os.PathLike) -> Iterator[Report]:
     """Lazily yield every report under root. Unreadable or non-report files are skipped."""
-    for path in iter_report_paths(root):
+    paths = list(iter_report_paths(root))
+    for done, path in enumerate(paths):
+        progress.report("documents", done, len(paths))
         try:
             yield load_report(path)
         except (ValueError, OSError) as exc:
             log.warning("skipping %s: %s", path, exc)
+    progress.report("documents", len(paths), len(paths), force=True)
 
 
 def write_staging(reports: Iterable[Report], out_dir: str | os.PathLike) -> dict[str, int]:

@@ -38,6 +38,7 @@ import duckdb
 import httpx
 from pydantic import ValidationError
 
+from wellgraph import progress
 from wellgraph.extract.models import PageExtraction, to_event_row, validate_against_page
 from wellgraph.extract.prompt import SYSTEM_PROMPT, build_messages, json_schema
 from wellgraph.extract.routing import score_page
@@ -324,7 +325,8 @@ def extract_events(
 
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = [(job, pool.submit(call, job)) for job in todo]
-            for job, future in futures:
+            for done, (job, future) in enumerate(futures):
+                progress.report("extract", stats["cache_hits"] + done, len(jobs))
                 try:
                     reply = future.result()
                 except (RuntimeError, httpx.HTTPError, KeyError, ValueError) as exc:
@@ -335,6 +337,8 @@ def extract_events(
                     continue
                 stats["model_calls"] += 1
                 cache.put(client.model, job[2], reply)
+
+        progress.report("extract", len(jobs), len(jobs), force=True)
 
         # 3. Validate, depth-join and collect rows.
         joins: dict[int, tuple[list, list, list]] = {}

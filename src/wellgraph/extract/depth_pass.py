@@ -28,6 +28,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from rapidfuzz import fuzz
 
+from wellgraph import progress
 from wellgraph.extract.models import (
     DEPTH_TOLERANCE_M,
     QUOTE_MATCH_THRESHOLD,
@@ -195,7 +196,8 @@ def resolve_depths(kg_dir: str | Path, client: LLMClient, cache_dir: str | Path,
     stats["cache_hits"] = len(jobs) - len(todo)
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = [(job, pool.submit(_ask, client, job[1], schema)) for job in todo]
-        for (ev, _, _, key), future in futures:
+        for done, ((ev, _, _, key), future) in enumerate(futures):
+            progress.report("depth_pass", stats["cache_hits"] + done, len(jobs))
             try:
                 reply = future.result()
             except (RuntimeError, KeyError, ValueError, httpx.HTTPError) as exc:
@@ -205,6 +207,8 @@ def resolve_depths(kg_dir: str | Path, client: LLMClient, cache_dir: str | Path,
                 continue
             stats["model_calls"] += 1
             cache.put(client.model, key, reply)
+
+    progress.report("depth_pass", len(jobs), len(jobs), force=True)
 
     # 3. Check each answer against the text it was given, then apply it.
     for ev, _, supplied, key in jobs:
