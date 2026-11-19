@@ -1,0 +1,6 @@
+﻿lsuName,lsuLevel,lsuNameParent,lsuDescription,IsuFactPageUrl,lsuNpdidLithoStrat,lsuNpdidLithoStratParent
+NORDLAND GP,GROUP,,"Nordland Group
+
+Name: invented, multi-line ""description"" text.",https://example.test/strat/113,113,
+SHETLAND GP,GROUP,,Shetland Group,https://example.test/strat/143,143,
+TOR FM,FORMATION,SHETLAND GP,Tor Formation,https://example.test/strat/170,170,143

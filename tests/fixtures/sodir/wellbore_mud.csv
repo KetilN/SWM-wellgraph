@@ -1,0 +1,5 @@
+﻿wlbName,wlbMD,wlbMudWeightAtMD,wlbMudViscosityAtMD,wlbYieldPointAtMD,wlbMudType,wlbMudDateMeasured,wlbNpdidWellbore,wlbMudDateUpdated,datesyncNPD
+99/1-1,171,1.04,0.0,0.0,WATER BASED,29.03.1989,101,20.02.2026,19.11.2026
+99/1-1,2500,1.45,23.0,9.5,KCl/Polymer,,101,20.02.2026,19.11.2026
+99/1-1,3000,0.00,30.0,0.0,DUMMY,01.05.1989,101,20.02.2026,19.11.2026
+99/1-2 A,1200,1.20,18.0,7.0,OIL BASED,10.12.1999,102,20.02.2026,19.11.2026

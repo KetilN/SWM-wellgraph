@@ -1,0 +1,3 @@
+﻿wlbWellboreName,wlbWell,wlbDrillingOperator,wlbStatus,wlbPurpose,wlbWellType,wlbEntryDate,wlbCompletionDate,wlbField,wlbTotalDepth,wlbWaterDepth,wlbDrillingFacility,wlbNsDecDeg,wlbEwDecDeg,wlbFactPageUrl,wlbNpdidWellbore,datesyncNPD
+99/1-A-1 H,99/1-A-1,Alpha Oil AS,P&A,PRODUCTION,DEVELOPMENT,22.07.2011,21.09.2011,ALFA,5927.0,72.0,ALFA A,60.010000,2.010000,https://example.test/development/201,201,19.11.2026
+99/1-A-2 AH,99/1-A-2,Alpha Oil AS,ONLINE,INJECTION ,DEVELOPMENT,18.11.2011,,ALFA,,72.0,ALFA A,60.010100,2.010100,https://example.test/development/202,202,19.11.2026

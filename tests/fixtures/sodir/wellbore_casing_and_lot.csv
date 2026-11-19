@@ -1,0 +1,7 @@
+﻿wlbName,wlbCasingType,wlbCasingDiameter,wlbCasingDepth,wlbHoleDiameter,wlbHoleDepth,wlbLotMudDencity,wlbFormationTestType,wlbNpdidWellbore,wlbCasingDateUpdated,datesyncNPD
+99/1-1,CONDUCTOR ,30    ,150.0,36    ,0.0,0.00, ,101,20.02.2026,19.11.2026
+99/1-1,INTERM.   ,13 3/8,1195.0,17 1/2,1200.0,1.55,LOT,101,20.02.2026,19.11.2026
+99/1-1,INTERM.   ,9 5/8 ,2945.0,12 174,2950.0,1.78,FIT,101,20.02.2026,19.11.2026
+99/1-1,OPEN HOLE ,      ,3574.0,8  1/2,3574.0,0.00, ,101,20.02.2026,19.11.2026
+99/1-2 A,LINER     ,7     ,3390.0,15.95 ,3400.5,0.00, ,102,20.02.2026,19.11.2026
+99/9-9,CONDUCTOR ,30    ,150.0,36    ,155.0,0.00, ,999,20.02.2026,19.11.2026
