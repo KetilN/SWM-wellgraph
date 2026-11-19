@@ -67,9 +67,11 @@ Group in the 12 1/4 in section, and at what mud weight?"
   derived from its depth against SODIR casing and formation-top tables. If the model also
   states them, use that only as a cross-check.
 - Ontology is small and hand-written in `ontology.yaml`. The LLM never invents schema; it
-  fills it. `ontology.yaml` is a draft with two rings: core (what the graph holds,
-  checked against the table contract by `tests/test_ontology.py`) and planned (the wider
-  SWM proposal: well data, seismic, geology; no data source connected).
+  fills it. `ontology.yaml` is a draft with three rings: core (what the graph holds,
+  checked against the table contract by `tests/test_ontology.py`), observed (15 kinds
+  of content the reports contain but the graph does not extract yet, with page counts
+  from the 7 samples), and planned (the wider SWM proposal: well data, seismic, geology;
+  no data source connected).
 - **OSDU official schemas are the main reference for the data schema** (data-definitions
   repo, community.opengroup.org). The Accenture OSDU Ontology is secondary: it covers
   only Well / Wellbore / WellLog / Trajectory, useful for relation naming.
@@ -203,7 +205,7 @@ Next, in order:
 ## Layout
 ```
 data/                     derived files only, git-ignored (factpages/, staging/, kg/)
-ontology.yaml             entity / relationship types: core ring + planned ring (draft)
+ontology.yaml             entity / relationship types: core, observed and planned rings
 schema.yaml               the table contract: tables, columns, types, units, enums
                           (loaded by src/wellgraph/graph/schema.py)
 samples/reports/          four report JSONs (25/6, 25/7) for trying the pipeline

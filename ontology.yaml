@@ -1,9 +1,14 @@
 # wellgraph ontology: entity types and relationship types of the knowledge graph.
 #
-# STATUS: draft. Two rings:
+# STATUS: draft. Three rings:
 #   core     what the graph holds today, built from SODIR FactPages and the end-of-well
 #            reports. Each core entity names the table it is stored in
-#            (src/wellgraph/graph/schema.py is the column-level contract).
+#            (schema.yaml is the column-level contract).
+#   observed what the end-of-well reports contain but the graph does not extract yet.
+#            Found by reading and profiling 7 sample reports (1,208 pages). "seen_in"
+#            counts pages whose text matches keywords for that content, and how many of
+#            the 7 reports have any; it is an upper bound on mentions, not a count of
+#            records. Extracting any of these needs no new data source.
 #   planned  the wider subsurface model from the team's SWM schema proposal (well data,
 #            seismic, geology). No data source is connected for these yet; they are
 #            listed so both views share one vocabulary and one join point (the wellbore).
@@ -11,7 +16,8 @@
 # Entity status:
 #   populated  has rows in the graph
 #   defined    table and columns exist, no rows yet
-#   planned    name and meaning only
+#   observed   present in the reports, not extracted
+#   planned    name and meaning only, no data source
 #
 # osdu_kind is the closest kind in the official OSDU data definitions
 # (https://community.opengroup.org/osdu/data/data-definitions). Every kind named here was
@@ -91,14 +97,157 @@ entities:
 
   DrillingEvent:
     ring: core
-    status: defined
+    status: populated
     osdu_kind: master-data--Risk
     table: event
     source: extracted from report pages by a language model, then depth-joined
     description: >
       Something that went wrong while drilling (lost circulation, kick, stuck pipe, tight
       hole, instability, pack-off, washout, fishing, unplanned sidetrack) with depth
-      interval, mud weight, remedy, lesson and a verbatim quote.
+      interval, mud weight, remedy, lesson and a verbatim quote. Each event says how
+      exact its depth is (depth_basis: stated, context_point, context_interval, none).
+
+  # ------------------------------------------------------------------------- observed
+  # Present in the end-of-well reports, not extracted yet.
+
+  DailyOperationsReport:
+    ring: observed
+    status: observed
+    osdu_kind: master-data--OperationsReport
+    seen_in: {pages: 124, reports: 7}
+    description: >
+      One dated row or page of the daily drilling log: date, depth at report time, mud
+      weight and the operations text. Most events without their own depth get their
+      context depth from here.
+    would_enable: a time-depth curve per wellbore, and a date and exact depth for every event
+
+  ReportSection:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 754, reports: 7}
+    description: >
+      A headed section of a report, such as '12 1/4" hole: 1630-2926 m'. Carries the hole
+      size and interval for the text under it. (seen_in counts pages with a table or
+      title layout element.)
+    would_enable: hole section for events whose page gives no depth at all
+
+  LeakOffTest:
+    ring: observed
+    status: observed
+    osdu_kind: work-product-component--FormationIntegrityTest
+    seen_in: {pages: 98, reports: 7}
+    description: >
+      Leak-off or formation integrity test at a casing shoe, with depth and equivalent mud
+      weight. SODIR gives one value per casing; reports give the test itself.
+    would_enable: the drilling window (mud weight between pore pressure and leak-off) per section
+
+  PorePressureProfile:
+    ring: observed
+    status: observed
+    osdu_kind: work-product-component--PPFGDataset
+    seen_in: {pages: 72, reports: 6}
+    description: Pore pressure estimates or measurements by depth interval.
+    would_enable: comparing the mud weight at an event with the pore pressure at that depth
+
+  BhaRun:
+    ring: observed
+    status: observed
+    osdu_kind: master-data--BHARun
+    seen_in: {pages: 148, reports: 7}
+    description: A bottom hole assembly run, with its components and interval drilled.
+    would_enable: linking stuck pipe and tight hole to the assembly in the hole
+
+  BitRun:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 68, reports: 7}
+    description: >
+      One row of the bit record: bit size and type, depth in and out, hours, dull grade.
+      OSDU carries this as BitRecord inside master-data--OperationsReport.
+    would_enable: rate of penetration and bit performance per formation across wells
+
+  CementJob:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 103, reports: 7}
+    description: >
+      Cementing of a casing string: slurry, volumes, returns. Several loss events occur
+      during cement jobs. OSDU has master-data--PlannedCementJob for the plan only.
+    would_enable: separating losses while cementing from losses while drilling
+
+  DirectionalSurvey:
+    ring: observed
+    status: observed
+    osdu_kind: work-product-component--WellboreTrajectory
+    seen_in: {pages: 154, reports: 7}
+    description: Survey stations (measured depth, inclination, azimuth) along the wellbore.
+    would_enable: converting between measured and true vertical depth, so TVD events can be joined
+
+  Core:
+    ring: observed
+    status: observed
+    osdu_kind: master-data--Coring
+    seen_in: {pages: 121, reports: 6}
+    description: A cored interval with recovery and a core description.
+    would_enable: rock descriptions by depth; calibration for the planned petrophysical model
+
+  LoggingRun:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 112, reports: 7}
+    description: >
+      A wireline or LWD logging run: tools, interval logged, problems. The curves
+      themselves would be work-product-component--WellLog (planned ring).
+    would_enable: knowing which intervals have logs, and logging-tool sticking events
+
+  WellTest:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 82, reports: 6}
+    description: Drill stem or production test of an interval, with rates and pressures.
+    would_enable: flow results by formation, alongside the planned production data
+
+  LithologyDescription:
+    ring: observed
+    status: observed
+    osdu_kind: work-product-component--WellboreIntervalSet
+    seen_in: {pages: 217, reports: 7}
+    description: Cuttings and sidewall-core descriptions by depth interval.
+    would_enable: lithology at an event depth, finer than formation tops
+
+  LessonLearned:
+    ring: observed
+    status: observed
+    osdu_kind: master-data--Risk
+    seen_in: {pages: 84, reports: 5}
+    description: >
+      A lesson or recommendation the report draws, often in its own section. Today only
+      a lesson stated next to an event is kept, as the column event.lesson. In OSDU this
+      is a Risk with RiskType 'lessons learned'.
+    would_enable: recommendations for the next well, searchable by section and formation
+
+  TimeBreakdown:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 82, reports: 7}
+    description: >
+      Hours per activity or per kind of lost time. Rows of these tables are deliberately
+      not extracted as events.
+    would_enable: the time cost of each event type per well
+
+  ShallowGasAssessment:
+    ring: observed
+    status: observed
+    osdu_kind: local
+    seen_in: {pages: 46, reports: 6}
+    description: Site-survey prediction of shallow gas and what was observed while drilling.
+    would_enable: shallow hazard lookup around a planned location
 
   # -------------------------------------------------------------------------- planned
   # From the SWM schema proposal. Names in "proposal_name" are the proposal's own.
@@ -282,11 +431,35 @@ relationships:
     stored_as: event.document_id + event.page_no
     properties: [text_span, confidence]
 
+  # ------------------------------------------------------------------------- observed
+  REPORTS_ON: {from: DailyOperationsReport, to: Wellbore, ring: observed}
+  REPORTED_IN: {from: DrillingEvent, to: DailyOperationsReport, ring: observed}
+  SECTION_OF_DOCUMENT: {from: ReportSection, to: Document, ring: observed}
+  COVERS: {from: ReportSection, to: HoleSection, ring: observed}
+  TESTED_AT: {from: LeakOffTest, to: HoleSection, ring: observed}
+  PRESSURE_IN: {from: PorePressureProfile, to: Wellbore, ring: observed}
+  RUN_IN: {from: BhaRun, to: HoleSection, ring: observed}
+  DRILLED: {from: BitRun, to: HoleSection, ring: observed}
+  CEMENTS: {from: CementJob, to: HoleSection, ring: observed}
+  DURING: {from: DrillingEvent, to: CementJob, ring: observed}
+  SURVEYS: {from: DirectionalSurvey, to: Wellbore, ring: observed}
+  CUT_IN: {from: Core, to: GeologicalFormation, ring: observed}
+  LOGS: {from: LoggingRun, to: HoleSection, ring: observed}
+  TESTS: {from: WellTest, to: GeologicalFormation, ring: observed}
+  DESCRIBES_INTERVAL: {from: LithologyDescription, to: Wellbore, ring: observed}
+  DRAWN_FROM: {from: LessonLearned, to: DrillingEvent, ring: observed}
+  TIME_SPENT_IN: {from: TimeBreakdown, to: Wellbore, ring: observed}
+  ASSESSES: {from: ShallowGasAssessment, to: Wellbore, ring: observed}
+  # links from the observed ring to the planned ring
+  ACQUIRES: {from: LoggingRun, to: WellLog, ring: observed, note: link to the planned ring}
+  CALIBRATES: {from: Core, to: PetrophysicalModel, ring: observed, note: link to the planned ring}
+
   # -------------------------------------------------------------------------- planned
   LOGGED_IN: {from: WellLog, to: Wellbore, ring: planned}
   PRODUCED_FROM: {from: ProductionData, to: Well, ring: planned}
   INJECTED_INTO: {from: InjectionData, to: Well, ring: planned}
   SCHEDULED_FOR: {from: WellSchedule, to: Well, ring: planned}
+  TIED_TO: {from: Seismic2D, to: Wellbore, ring: planned, note: seismic-to-well tie}
   VINTAGE_OF: {from: Seismic4DVintage, to: Seismic3D, ring: planned}
   DERIVED_FROM: {from: SeismicAttribute, to: Seismic3D, ring: planned}
   BOUNDED_BY: {from: Layer, to: Horizon, ring: planned}
