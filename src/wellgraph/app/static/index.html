@@ -123,6 +123,7 @@
     <div class="tabs" role="tablist" data-pane="left">
       <button class="tab" role="tab" data-view="map">Map</button>
       <button class="tab" role="tab" data-view="strip">Depth profile</button>
+      <button class="tab" role="tab" data-view="poroperm" id="tab-poroperm">Poro–perm</button>
       <button class="tab" role="tab" data-view="timedepth" id="tab-timedepth">Time–depth</button>
       <button class="tab" role="tab" data-view="graph">Wellbore graph</button>
       <button class="tab" role="tab" data-view="model">Model</button>
@@ -131,11 +132,12 @@
     </div>
     <div class="view" id="view-strip">
       <dl class="facts" id="facts"></dl>
-      <svg id="strip" viewBox="0 0 520 780" role="img" aria-label="Depth chart of the selected wellbore"></svg>
+      <svg id="strip" viewBox="0 0 720 780" role="img" aria-label="Depth chart of the selected wellbore"></svg>
       <p class="small muted legend" id="stratlegend"></p>
       <p class="small muted">Formation colours follow the international chronostratigraphic chart, by the dominant age of each group.
         Events: filled = depth stated in the report, hollow = depth from the surrounding text, bar = only the drilled interval is known.
-        Mud weight line: SODIR table. Diamonds: leak-off values.</p>
+        Mud weight line: SODIR table. Diamonds: leak-off values. Porosity and permeability: core plugs, coloured by rock type
+        (© GeoProvider https://geoprovider.no/, CC BY 4.0).</p>
     </div>
     <div class="view fill" id="view-map">
       <div id="map" role="img" aria-label="Map of the Norwegian continental shelf with offset wells"></div>
@@ -146,6 +148,14 @@
         <span><i class="dot" style="background:var(--muted);opacity:.6"></i>other well</span>
       </p>
       <p class="small muted" id="maplegend"></p>
+    </div>
+    <div class="view" id="view-poroperm">
+      <h3 id="pptitle">Porosity against permeability, from core</h3>
+      <p class="small"><label for="ppformation">Formation</label><select id="ppformation"></select>
+        <label for="pplith" style="margin-left:10px">Rock type</label><select id="pplith"></select></p>
+      <svg id="ppplot" viewBox="0 0 640 470" role="img" aria-label="Cross-plot of porosity and horizontal permeability"></svg>
+      <p class="small muted" id="ppnote"></p>
+      <p class="small muted">Core data: © GeoProvider <a href="https://geoprovider.no/" target="_blank" rel="noopener">https://geoprovider.no/</a>, CC BY 4.0 (RealPore).</p>
     </div>
     <div class="view" id="view-timedepth">
       <h3 id="tdtitle">Time–depth curve</h3>
@@ -219,7 +229,9 @@ const GROUP_AGE = {"NORDLAND GP":"Neogene", "HORDALAND GP":"Paleogene", "SOTBAKK
 const stratColour = group => AGE[GROUP_AGE[group]] || "#c9ccd1";
 
 const state = {well: null, radius: 20, off: new Set(), detail: null, selected: null, sort: {key: "depth", dir: 1},
-               tabs: {left: "map", right: "matrix"}, filter: null};
+               tabs: {left: "map", right: "matrix"}, filter: null, core: []};
+const ROCK = {sandstone: "#e0b63c", siltstone: "#b08a5a", claystone: "#6f7f86", limestone: "#4f8fd0", chalk: "#9cc3e6", marlstone: "#8fb39a"};
+const rockColour = l => ROCK[l] || "#9aa0a6";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const label = t => t.replaceAll("_", " ");
@@ -294,9 +306,9 @@ function openWell(name) { $("well").value = name; state.well = name; state.selec
 
 async function load() {
   $("evidence").innerHTML = '<p class="muted small">Select an event to see the report text it comes from.</p>';
-  state.detail = await api("/api/well", {name: state.well});
+  [state.detail, state.core] = await Promise.all([api("/api/well", {name: state.well}), api("/api/core", {name: state.well}).then(r => r.samples)]);
   renderFacts(); renderKpis(); renderChips(); renderEvents(); renderTable(); renderStrip();
-  loadOffsets(); loadInstanceGraph(); loadTimeDepth();
+  loadOffsets(); loadInstanceGraph(); loadTimeDepth(); initPoroPerm();
 }
 
 function renderFacts() {
@@ -393,13 +405,13 @@ async function select(id) {
 
 // ---- well strip ---------------------------------------------------------------------
 function renderStrip() {
-  const d = state.detail, W = 520, H = 780, top = 34, bottom = 14;
+  const d = state.detail, W = 720, H = 780, top = 34, bottom = 14;
   const maxDepth = Math.max(d.wellbore.total_depth_md || 0, ...d.formation_tops.map(f => f.base_md || f.top_md || 0),
     ...d.hole_sections.map(h => h.base_md || h.casing_depth_md || 0), ...d.events.map(e => e.base_md || e.context_base_md || 0), 500);
   const y = m => top + (H - top - bottom) * m / maxDepth;
-  const X = {axis: 40, fm: [46, 212], split: 122, hole: [222, 280], mud: [294, 400], ev: [414, 512]};
+  const X = {axis: 40, fm: [46, 212], split: 122, hole: [222, 280], mud: [294, 400], ev: [414, 512], phi: [528, 602], k: [636, 712]};
   let s = ""; const head = (x, t) => `<text x="${x}" y="14" class="dim">${t}</text>`;
-  s += head(X.fm[0], "Group") + head(X.split + 3, "Formation") + head(X.hole[0], "Hole") + head(X.mud[0], "Mud weight, sg") + head(X.ev[0], "Events");
+  s += head(X.fm[0], "Group") + head(X.split + 3, "Formation") + head(X.hole[0], "Hole") + head(X.mud[0], "Mud weight, sg") + head(X.ev[0], "Events") + head(X.phi[0], "Porosity, %") + head(X.k[0], "Perm., mD");
   const step = maxDepth > 3000 ? 500 : 250;
   for (let m = 0; m <= maxDepth; m += step)
     s += `<line x1="${X.axis}" x2="${W - 6}" y1="${y(m)}" y2="${y(m)}" stroke="var(--line)" stroke-width=".6"/><text x="${X.axis - 4}" y="${y(m) + 4}" text-anchor="end" class="dim">${m}</text>`;
@@ -441,10 +453,55 @@ function renderStrip() {
       s += `<circle data-id="${e.event_id}" cx="${x}" cy="${y(eventDepth(e))}" r="${sel ? 6.5 : 4.2}" fill="${exact ? c : "var(--panel)"}" stroke="${sel ? "var(--ink)" : c}" stroke-width="${sel ? 2 : 1.6}" style="cursor:pointer">${tip}</circle>`;
       if (e.mud_weight_sg && e.mud_weight_source === "report") s += `<circle cx="${mw(e.mud_weight_sg)}" cy="${y(eventDepth(e))}" r="2.6" fill="${c}"><title>${fmt(e.mud_weight_sg, 2)} sg stated in the report</title></circle>`; }
   }
+  // core tracks: porosity 0-40 %, horizontal permeability on a log scale 0.01-10,000 mD
+  const px = v => X.phi[0] + (X.phi[1] - X.phi[0]) * Math.min(40, Math.max(0, v)) / 40;
+  const kx = v => X.k[0] + (X.k[1] - X.k[0]) * (Math.min(4, Math.max(-2, Math.log10(v))) + 2) / 6;
+  for (const v of [0, 20, 40]) s += `<text x="${px(v)}" y="27" text-anchor="middle" class="dim" font-size="9.5">${v}</text><line x1="${px(v)}" x2="${px(v)}" y1="${top}" y2="${H - bottom}" stroke="var(--line)" stroke-width=".5"/>`;
+  for (const [e, t] of [[-2, ".01"], [0, "1"], [2, "100"], [4, "10k"]]) s += `<text x="${kx(10 ** e)}" y="27" text-anchor="middle" class="dim" font-size="9.5">${t}</text><line x1="${kx(10 ** e)}" x2="${kx(10 ** e)}" y1="${top}" y2="${H - bottom}" stroke="var(--line)" stroke-width=".5"/>`;
+  for (const c of state.core) { if (c.depth_md == null || c.depth_md > maxDepth) continue; const col = rockColour(c.lithology), yy = y(c.depth_md);
+    if (c.porosity_pct != null) s += `<circle cx="${px(c.porosity_pct)}" cy="${yy}" r="1.9" fill="${col}"><title>${fmt(c.depth_md, 1)} m · porosity ${fmt(c.porosity_pct, 1)} % · ${c.lithology || "rock type not given"}</title></circle>`;
+    if (c.kh_md != null) s += `<circle cx="${kx(c.kh_md)}" cy="${yy}" r="1.9" fill="${col}"><title>${fmt(c.depth_md, 1)} m · kh ${c.kh_md} mD (${c.kh_method}) · ${c.lithology || "rock type not given"}</title></circle>`; }
+  if (!state.core.length) s += `<text x="${(X.phi[0] + X.k[1]) / 2}" y="${top + 26}" text-anchor="middle" class="dim">no core data</text>`;
   $("strip").innerHTML = s;
   for (const el of $("strip").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
+  const rocks = [...new Set(state.core.map(c => c.lithology).filter(Boolean))];
   $("stratlegend").innerHTML = [...ages].map(([age, colour]) => `<span><i class="sw" style="background:${colour}"></i>${age}</span>`).join("") +
-    (groups.some(g => !GROUP_AGE[g.formation]) ? `<span><i class="sw" style="background:#c9ccd1"></i>no age assigned</span>` : "");
+    (groups.some(g => !GROUP_AGE[g.formation]) ? `<span><i class="sw" style="background:#c9ccd1"></i>no age assigned</span>` : "") +
+    rocks.map(r => `<span><i class="dot" style="background:${rockColour(r)}"></i>${r}</span>`).join("");
+}
+
+// ---- porosity–permeability cross-plot ---------------------------------------------
+function initPoroPerm() {
+  const counts = {}; for (const c of state.core) if (c.formation && c.porosity_pct != null && c.kh_md != null) counts[c.formation] = (counts[c.formation] || 0) + 1;
+  const formations = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  $("tab-poroperm").classList.toggle("nodata", !formations.length);
+  $("tab-poroperm").title = formations.length ? "" : "No core data with a formation for this wellbore";
+  $("ppformation").innerHTML = formations.map(([f, n]) => `<option value="${esc(f)}">${esc(f)} (${n} here)</option>`).join("");
+  $("ppformation").onchange = loadPoroPerm; $("pplith").onchange = loadPoroPerm;
+  if (formations.length) loadPoroPerm(true); else { $("ppplot").innerHTML = ""; $("pplith").innerHTML = ""; $("pptitle").textContent = "Porosity against permeability, from core";
+    $("ppnote").textContent = "This wellbore has no core samples with both porosity and permeability inside a known formation."; }
+}
+async function loadPoroPerm(reset) {
+  const formation = $("ppformation").value;
+  if (reset === true || !$("pplith").options.length || $("pplith").dataset.f !== formation) {
+    const liths = [...new Set(state.core.filter(c => c.formation === formation && c.lithology).map(c => c.lithology))];
+    $("pplith").innerHTML = `<option value="all">all</option>` + liths.map(l => `<option>${esc(l)}</option>`).join(""); $("pplith").dataset.f = formation; }
+  const lith = $("pplith").value, d = await api("/api/poroperm", {formation, lithology: lith});
+  const W = 640, H = 470, L = 58, R = 16, T = 16, B = 40, x = v => L + (W - L - R) * Math.min(40, v) / 40, y = v => T + (H - T - B) * (4 - Math.min(4, Math.max(-2, v))) / 6;
+  let s = "";
+  for (let e = -2; e <= 4; e++) s += `<line x1="${L}" x2="${W - R}" y1="${y(e)}" y2="${y(e)}" stroke="var(--line)" stroke-width=".6"/><text x="${L - 6}" y="${y(e) + 4}" text-anchor="end" class="dim">${10 ** e >= 1 ? 10 ** e : (10 ** e).toFixed(-e)}</text>`;
+  for (let v = 0; v <= 40; v += 5) s += `<line x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${H - B}" stroke="var(--line)" stroke-width=".6"/><text x="${x(v)}" y="${H - B + 14}" text-anchor="middle" class="dim">${v}</text>`;
+  s += `<text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" class="dim">porosity, %</text><text x="14" y="${(T + H - B) / 2}" text-anchor="middle" class="dim" transform="rotate(-90 14 ${(T + H - B) / 2})">horizontal permeability, mD</text>`;
+  const here = d.points.filter(p => p.wellbore === state.well), others = d.points.filter(p => p.wellbore !== state.well);
+  for (const p of others) s += `<circle cx="${x(p.porosity_pct)}" cy="${y(Math.log10(p.kh_md))}" r="2" fill="var(--muted)" fill-opacity=".35"><title>${esc(p.wellbore)} · ${fmt(p.depth_md, 1)} m · ${fmt(p.porosity_pct, 1)} % · ${p.kh_md} mD</title></circle>`;
+  for (const p of here) s += `<circle cx="${x(p.porosity_pct)}" cy="${y(Math.log10(p.kh_md))}" r="3" fill="${rockColour(p.lithology)}" stroke="var(--ink)" stroke-width=".5"><title>${esc(p.wellbore)} · ${fmt(p.depth_md, 1)} m · ${fmt(p.porosity_pct, 1)} % · ${p.kh_md} mD · ${p.lithology || ""}</title></circle>`;
+  if (d.fit) { const f = d.fit, x0 = Math.max(0, f.porosity_p10 - 5), x1 = Math.min(40, f.porosity_p90 + 5);
+    s += `<line x1="${x(x0)}" y1="${y(f.intercept + f.slope * x0)}" x2="${x(x1)}" y2="${y(f.intercept + f.slope * x1)}" stroke="var(--accent)" stroke-width="2.2"/>
+      <text x="${W - R - 4}" y="${T + 14}" text-anchor="end" font-weight="600">log₁₀ k = ${f.intercept.toFixed(2)} + ${f.slope.toFixed(3)}·φ   R² ${f.r2.toFixed(2)}</text>`; }
+  $("ppplot").innerHTML = s; $("pptitle").textContent = `${formation}: porosity against permeability, from core`;
+  const wells = new Set(d.points.map(p => p.wellbore)).size;
+  $("ppnote").textContent = `${d.pairs.toLocaleString()} paired samples in the graph for ${formation}${lith === "all" ? "" : ", " + lith}${d.points.length < d.pairs ? ` (${d.points.length} shown)` : ""}, from ${wells} wellbore${wells === 1 ? "" : "s"}; ${here.length} from ${state.well} are highlighted and coloured by rock type. ` +
+    (d.fit ? `The line is fitted on ${d.fit.samples.toLocaleString()} samples from ${d.fit.wellbores} wellbores.` : "No fitted line: a fit needs at least 30 paired samples from 3 or more wellbores in this formation.");
 }
 
 // ---- time–depth curve ---------------------------------------------------------------
