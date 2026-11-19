@@ -164,6 +164,16 @@ Done:
 - [x] Brief, tech stack and hosting outline agreed.
 - [x] Data schema inspected (see "Verified findings").
 - [x] Repo created and pushed: structure, `.gitignore`, this file.
+- [x] MCP server: six read-only tools over a Parquet graph, stdio and HTTP.
+- [x] Backbone: whole-shelf SODIR tables in the graph (9,883 wellbores, 41,537 formation
+      tops, 8,758 hole sections).
+- [x] Report reader and document / page tables; 7 sample reports loaded (1,208 pages).
+- [x] `ontology.yaml` (core + planned rings) and `schema.yaml` (table contract).
+- [x] Extraction pipeline up to the model call: routing, prompt, event model, validation
+      against the page, depth joins, response cache, runner. Tested with a fake model.
+      Dry run on the 7 samples: 194 of 1,208 pages routed, ~450k input tokens (rough).
+- [ ] **Blocked on a model endpoint** (`WELLGRAPH_LLM_*` in `.env`): no event has been
+      extracted by a real model yet, and the runner's HTTP client is untested against one.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set
