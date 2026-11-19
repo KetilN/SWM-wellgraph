@@ -125,7 +125,7 @@ def merge_duplicates(rows: list[dict[str, Any]], window_m: float = 10.0) -> list
 class OpenAICompatibleClient:
     """Chat-completions client for any OpenAI-compatible endpoint (Azure Foundry included)."""
 
-    RETRYABLE = (429, 500, 502, 503, 504)
+    RETRYABLE = (408, 429, 500, 502, 503, 504)
 
     def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 120.0,
                  retries: int = 5, extra_headers: dict[str, str] | None = None,

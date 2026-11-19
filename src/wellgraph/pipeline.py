@@ -56,6 +56,7 @@ def run_pipeline(
     kg_dir.mkdir(parents=True, exist_ok=True)
     stats: dict[str, Any] = {}
 
+    progress.report("backbone", force=True)
     if (kg_dir / "wellbore.parquet").is_file():
         stats["backbone"] = "already built"
     else:
