@@ -178,14 +178,21 @@ Done:
       answers, 5 event questions awaiting hand-labelled answers) and a runner
       (`wellgraph.evaluation`) with a BM25 search baseline.
 - [x] `Dockerfile` for the hosted MCP endpoint (port 7860, graph baked in from a tarball).
-- [x] Real extraction on the 7 samples (claude-haiku-5.5, 194 pages, no failed pages):
-      206 events after merging duplicates. Each event has a `depth_basis`: stated 111,
-      context_point 45, context_interval 21, none 29. Hole section attached to 85% of
-      events and formation to 78% (90% and 86% leaving out the development well, which
-      has no SODIR casing or tops). Mud weight on about 30%.
-      Finding: reports rarely give the depth in the event's own sentence; it sits in the
-      preceding sentence, the daily-report row or the section interval. That context is
-      now captured separately and labelled, never mixed with stated depths.
+- [x] Real extraction on the 7 samples (claude-haiku-5.5, 202 pages routed, no failed
+      pages): 213 events after merging duplicates. Completeness after the SODIR mud fill
+      and the second depth pass: some depth on 93% of events (stated 113, context_point 59,
+      context_interval 27, none 14), hole section 92%, formation 85%, mud weight 85%
+      (report 61, SODIR table the rest). Leaving out the development well, which has no
+      SODIR casing or tops: 96% / 96% / 95% / 94%.
+      Rebuild without model calls, in this order:
+      `python -m wellgraph.extract.run --kg data/kg --offline <model>` then
+      `python -m wellgraph.extract.depth_pass --kg data/kg --offline <model>`.
+- [x] Routing recall measured on 150 not-sent pages: about 97% (docs/routing-recall.md);
+      bit-balling and "could not pass" patterns added to the router.
+- [x] Daily-report rows parsed without a model (`wellgraph.extract.daily`, 737 rows from
+      5 of 7 wellbores, docs/daily-reports.md). Table not yet in schema.yaml or served.
+- [x] Web app on the MCP server: NCS map (SODIR quadrants, blocks, fields; Natural Earth
+      coastline; all local files), well strip, events, source text.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set
