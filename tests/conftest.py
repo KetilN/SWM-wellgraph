@@ -51,22 +51,27 @@ DOCUMENTS = [
 
 EVENTS = [
     # id, wb, type, top, base, mw, hole, formations, description, remedy, lesson, doc, page, span,
-    # conf, depth_ref, mud_weight_raw, mud_weight_kind
+    # conf, depth_ref, mud_weight_raw, mud_weight_kind, depth_basis, context_top_md, context_base_md
     ("ev-1", 1, "lost_circulation", 2500.0, 2520.0, 1.45, 12.25, ["SHETLAND GP", "TOR FM"],
      "Lost 12 m3/hr while drilling.", "Pumped LCM pill.", "Keep ECD below 1.50 sg.",
-     "doc-1", 41, "Lost returns at 2500 m, 12 m3/hr, mud weight 1.45 sg.", 0.9, "ASSUMED_MD", "1.45 sg", "mud_in_hole"),
+     "doc-1", 41, "Lost returns at 2500 m, 12 m3/hr, mud weight 1.45 sg.", 0.9, "ASSUMED_MD", "1.45 sg", "mud_in_hole", "stated", None, None),
     ("ev-2", 2, "lost_circulation", 2600.0, 2610.0, 1.50, 12.25, ["SHETLAND GP", "TOR FM"],
      "Total losses.", "Set cement plug.", None,
-     "doc-2", 17, "Total losses at 2600 m with 1.50 sg mud.", 0.8, "MD", "1.50 sg", "mud_in_hole"),
+     "doc-2", 17, "Total losses at 2600 m with 1.50 sg mud.", 0.8, "MD", "1.50 sg", "mud_in_hole", "stated", None, None),
     ("ev-3", 2, "tight_hole", 1000.0, 1050.0, 1.20, 17.5, [],
      "Tight hole while tripping.", "Reamed.", None,
-     "doc-2", 9, "Tight hole 1000-1050 m, reamed and washed.", 0.7, "ASSUMED_MD", "1.20 sg", "mud_in_hole"),
+     "doc-2", 9, "Tight hole 1000-1050 m, reamed and washed.", 0.7, "ASSUMED_MD", "1.20 sg", "mud_in_hole", "stated", None, None),
     ("ev-4", 3, "lost_circulation", 2700.0, 2705.0, 1.52, 12.25, ["SHETLAND GP"],
      "Partial losses.", "Reduced pump rate.", None,
-     "doc-3", 55, "Partial losses at 2700 m, 1.52 sg.", 0.85, "ASSUMED_MD", "12.7 ppg", "ecd"),
+     "doc-3", 55, "Partial losses at 2700 m, 1.52 sg.", 0.85, "ASSUMED_MD", "12.7 ppg", "ecd", "stated", None, None),
     ("ev-5", 3, "kick", 3300.0, 3300.0, 1.60, 8.5, [],
      "Took 2 m3 influx.", "Shut in, circulated out.", "Raise mud weight earlier.",
-     "doc-3", 70, "Kick taken at 3300 m, 2 m3 gain.", 0.95, "TVD", "1.60 sg", "mud_in_hole"),
+     "doc-3", 70, "Kick taken at 3300 m, 2 m3 gain.", 0.95, "TVD", "1.60 sg", "mud_in_hole", "stated", None, None),
+    # depth known only from context: the 12 1/4 in section interval of 99/1-1
+    ("ev-6", 1, "pack_off", None, None, None, 12.25, ["SHETLAND GP", "TOR FM"],
+     "Hole packed off.", "Worked pipe.", None,
+     "doc-1", 41, "The hole packed off repeatedly.", 0.6,
+     "ASSUMED_MD", None, None, "context_interval", 2400.0, 2900.0),
 ]
 
 PAGES = [

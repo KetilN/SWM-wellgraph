@@ -49,6 +49,8 @@ log = logging.getLogger(__name__)
 # A quote that is not on the page means the event cannot be cited: drop it. Other
 # validation findings (a number not found verbatim) are logged and the event is kept.
 FATAL_PROBLEMS = ("text_span_not_found",)
+# Rows of a time-breakdown table ("1 Hour KT - Mud losses") are bookkeeping, not events.
+_TIME_BREAKDOWN_ROW = re.compile(r"^\W*\d+(?:[.,]\d+)?\s*(?:hours?|hrs?)\s+[A-Z]{1,3}\s*-", re.IGNORECASE)
 MAX_PAGE_CHARS = 20_000  # runaway OCR pages are cut before they are sent
 
 
@@ -79,33 +81,43 @@ def merge_duplicates(rows: list[dict[str, Any]], window_m: float = 10.0) -> list
     """Collapse the same event told on several pages (daily report, summary, appendix).
 
     Two rows are the same event when wellbore and type match and their depths lie within
-    `window_m` of each other; rows without a depth only merge on an identical quote. The
+    `window_m` of each other (a stated depth or a single context depth; a context interval
+    is too wide to tell occurrences apart); rows without such a depth only merge on an
+    identical quote. A row with a stated depth is preferred over one without. The
     row kept is the most confident one, then the one with a mud weight, then the longest
     quote. Its `description` is unchanged; nothing is blended across pages.
     """
     def rank(row):
-        return (row["confidence"] or 0.0, row["mud_weight_sg"] is not None,
-                len(row["text_span"] or ""))
+        return (row["top_md"] is not None, row["confidence"] or 0.0,
+                row["mud_weight_sg"] is not None, len(row["text_span"] or ""))
 
     kept: list[dict[str, Any]] = []
-    with_depth = sorted((r for r in rows if r["top_md"] is not None),
-                        key=lambda r: (r["wellbore_id"], r["event_type"], r["top_md"]))
+    def point(row):  # a depth precise enough to tell two occurrences apart
+        if row["top_md"] is not None:
+            return row["top_md"]
+        if row.get("depth_basis") == "context_point":
+            return row["context_top_md"]
+        return None
+
+    rows = [{**r, "_point": point(r)} for r in rows]
+    with_depth = sorted((r for r in rows if r["_point"] is not None),
+                        key=lambda r: (r["wellbore_id"], r["event_type"], r["_point"]))
     for row in with_depth:
         last = kept[-1] if kept else None
         if (last and last["wellbore_id"] == row["wellbore_id"]
                 and last["event_type"] == row["event_type"]
-                and last["top_md"] is not None
-                and row["top_md"] - last["_anchor"] <= window_m):
+                and row["_point"] - last["_anchor"] <= window_m):
             if rank(row) > rank(last):
                 kept[-1] = {**row, "_anchor": last["_anchor"]}
         else:
-            kept.append({**row, "_anchor": row["top_md"]})
+            kept.append({**row, "_anchor": row["_point"]})
     by_quote: dict[tuple, dict[str, Any]] = {}
-    for row in (r for r in rows if r["top_md"] is None):
+    for row in (r for r in rows if r["_point"] is None):
         key = (row["wellbore_id"], row["event_type"], " ".join((row["text_span"] or "").split()))
         if key not in by_quote or rank(row) > rank(by_quote[key]):
             by_quote[key] = row
-    return [{k: v for k, v in r.items() if k != "_anchor"} for r in kept] + list(by_quote.values())
+    return [{k: v for k, v in r.items() if k not in ("_anchor", "_point")}
+            for r in [*kept, *by_quote.values()]]
 
 
 class OpenAICompatibleClient:
@@ -271,6 +283,7 @@ def extract_events(
         "documents": len(documents), "pages_total": 0, "pages_sent": 0, "pages_failed": 0,
         "cache_hits": 0, "model_calls": 0, "events_written": 0, "events_dropped": 0,
         "drop_reasons": Counter(), "estimated_input_tokens": 0, "warnings": 0,
+        "context_depths_discarded": 0,
     }
     rows: dict[str, dict[str, Any]] = {}
     fixed_tokens = (len(SYSTEM_PROMPT) + len(json.dumps(schema))) // 4
@@ -338,16 +351,28 @@ def extract_events(
                 )
             sections, tops = joins[wid]
             for event in extraction.events:
+                if _TIME_BREAKDOWN_ROW.match(event.text_span):
+                    stats["events_dropped"] += 1
+                    stats["drop_reasons"]["time_breakdown_row"] += 1
+                    continue
                 problems = validate_against_page(event, text)
                 fatal = [p for p in problems if p.startswith(FATAL_PROBLEMS)]
                 if fatal:
                     stats["events_dropped"] += 1
                     stats["drop_reasons"][fatal[0].split(":")[0]] += 1
                     continue
+                if any(p.startswith("context_") for p in problems):
+                    # a context depth that is not on the page is not evidence: forget it
+                    event = event.model_copy(
+                        update={"context_top_md": None, "context_base_md": None})
+                    stats["context_depths_discarded"] += 1
                 stats["warnings"] += len(problems)
+                top, base = event.join_interval
                 hole, formations = joins_for_event(
-                    sections, tops, event.top_md, event.base_md, event.resolved_depth_ref
+                    sections, tops, top, base, event.resolved_depth_ref
                 )
+                if hole is None and event.resolved_depth_ref in (None, "MD", "ASSUMED_MD"):
+                    hole = event.stated_hole_diameter_in  # the page's own section heading
                 row = to_event_row(event, wid, doc["document_id"], page_no, hole, formations)
                 rows[row["event_id"]] = row
 

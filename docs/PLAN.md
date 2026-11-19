@@ -176,11 +176,14 @@ Done:
       answers, 5 event questions awaiting hand-labelled answers) and a runner
       (`wellgraph.evaluation`) with a BM25 search baseline.
 - [x] `Dockerfile` for the hosted MCP endpoint (port 7860, graph baked in from a tarball).
-- [x] First real extraction on the 7 samples (claude-haiku-5.5, 194 pages, no failed
-      pages): 211 events after merging duplicates, 68% with a depth, 29% with a mud
-      weight. Spot-check of 20 random events after prompt tuning: about 17 are real hole
-      problems (a reading of a small sample, not a measured precision).
-      Known gaps: a third of events have no depth; same event without depth can repeat.
+- [x] Real extraction on the 7 samples (claude-haiku-5.5, 194 pages, no failed pages):
+      206 events after merging duplicates. Each event has a `depth_basis`: stated 111,
+      context_point 45, context_interval 21, none 29. Hole section attached to 85% of
+      events and formation to 78% (90% and 86% leaving out the development well, which
+      has no SODIR casing or tops). Mud weight on about 30%.
+      Finding: reports rarely give the depth in the event's own sentence; it sits in the
+      preceding sentence, the daily-report row or the section interval. That context is
+      now captured separately and labelled, never mixed with stated depths.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set

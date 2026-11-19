@@ -29,6 +29,8 @@ How to use it:
    distance + mud weight). Use offset_well_analysis for an aggregated view around a
    wellbore or a planned location.
 4. Use get_well_summary for one wellbore's formations, hole sections and events.
+   Every event has a depth_basis: 'stated' depths are exact; 'context_point' and
+   'context_interval' depths come from the surrounding text and are approximate; say so.
 5. Before stating an event as fact, call get_evidence with its event_id and cite the
    report title and page. Quote the text span; do not paraphrase numbers.
 
@@ -163,6 +165,10 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
             str | None,
             Field(description="mud_in_hole, ecd or unknown. Omit to include all."),
         ] = None,
+        exact_depth_only: Annotated[
+            bool,
+            Field(description="Only events whose depth the report states for the event itself."),
+        ] = False,
         limit: Limit = None,
     ) -> dict[str, Any]:
         """List drilling events across wells, filtered by any combination of event type,
@@ -173,13 +179,21 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         (MD, TVD, TVDSS, or ASSUMED_MD when the report gave no reference), mud weight in
         sg with the value as written (mud_weight_raw) and what it is (mud_weight_kind),
         hole size, formations, description, remedy, lesson and an event_id for
-        get_evidence. Hole size and formations are empty for TVD / TVDSS depths."""
+        get_evidence. Hole size and formations are empty for TVD / TVDSS depths.
+
+        Read depth_basis on every row before quoting a depth: 'stated' means top_md /
+        base_md are the report's own depth for the event; 'context_point' means the depth
+        is in context_top_md, taken from the surrounding narrative or the daily-report row
+        (the event is at or near it); 'context_interval' means only the interval being
+        drilled is known (context_top_md to context_base_md), so hole size is reliable but
+        formations list everything that interval crosses; 'none' means no depth. Say which
+        it is when you report a depth or a formation."""
         return guarded(
             store.query_events, event_type=event_type, formation=formation,
             hole_size=hole_size, wellbore=wellbore, near_wellbore=near_wellbore,
             lat=lat, lon=lon, radius_km=radius_km, include_reference=include_reference,
             min_mud_weight_sg=min_mud_weight_sg, max_mud_weight_sg=max_mud_weight_sg,
-            mud_weight_kind=mud_weight_kind, limit=limit,
+            mud_weight_kind=mud_weight_kind, exact_depth_only=exact_depth_only, limit=limit,
         )
 
     @mcp.tool(annotations=READ_ONLY)

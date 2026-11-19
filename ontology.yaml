@@ -264,13 +264,17 @@ relationships:
     to: HoleSection
     ring: core
     stored_as: event.hole_diameter_in
-    derived: depth join against hole_section (measured depth only)
+    derived: >
+      depth join against hole_section (measured depth only), using the event's stated
+      depth or else its context depth; see event.depth_basis for how exact it is
   IN_FORMATION:
     from: DrillingEvent
     to: GeologicalFormation
     ring: core
     stored_as: event.formations
-    derived: depth join against formation_top (measured depth only)
+    derived: >
+      depth join against formation_top (measured depth only); exact when
+      event.depth_basis is stated, approximate for context depths
   EVIDENCED_BY:
     from: DrillingEvent
     to: Page

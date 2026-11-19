@@ -310,3 +310,77 @@ def test_fenced_reply_already_in_the_cache_is_still_read(kg, tmp_path):
     fenced = "```json\n" + json.dumps({"events": [event()]}) + "\n```"
     stats = run(kg, FakeClient({"Lost returns": fenced}), tmp_path)
     assert stats["events_written"] == 1 and stats["pages_failed"] == 0
+
+
+# --- context depth in the runner -----------------------------------------------------
+
+CONTEXT_PAGE = (
+    "## 12 1/4\" hole section: 2400 - 2900 m\n\n"
+    "At 2620 m the string stalled out and the pump pressure rose. The hole packed off and "
+    "the string had to be worked free. Drilling continued. Later the hole was tight on the "
+    "wiper trip and had to be reamed."
+)
+
+
+@pytest.fixture
+def kg_context(kg):
+    con = duckdb.connect()
+    con.execute(f"create table page as select * from read_parquet('{kg}/page.parquet')")
+    con.execute("insert into page values ('doc-1', 3, ?, 'Section summary.', 'Reliable')",
+                [CONTEXT_PAGE])
+    con.execute(f"copy page to '{kg}/page.parquet' (format parquet)")
+    con.close()
+    return kg
+
+
+def context_event(**kw):
+    return event(top_md=None, base_md=None, mud_weight_sg=None, mud_weight_raw=None,
+                 mud_weight_kind=None, **kw)
+
+
+def test_context_depths_give_hole_section_and_formations(kg_context, tmp_path):
+    client = FakeClient({"string stalled out": {"events": [
+        context_event(event_type="pack_off", context_top_md=2620.0, context_base_md=2620.0,
+                      text_span="The hole packed off and the string had to be worked free."),
+        context_event(event_type="tight_hole", context_top_md=2400.0, context_base_md=2900.0,
+                      hole_size_stated='12 1/4"',
+                      text_span="Later the hole was tight on the wiper trip and had to be reamed."),
+    ]}})
+    stats = run(kg_context, client, tmp_path)
+    assert stats["events_written"] == 2
+    rows = {e["event_type"]: e for e in GraphStore(kg_context).query_events(limit=50)["results"]}
+    assert rows["pack_off"]["depth_basis"] == "context_point"
+    assert rows["pack_off"]["hole_diameter_in"] == 12.25
+    assert rows["pack_off"]["formations"] == ["SHETLAND GP", "TOR FM"]
+    assert rows["tight_hole"]["depth_basis"] == "context_interval"
+    assert rows["tight_hole"]["hole_diameter_in"] == 12.25
+    assert rows["tight_hole"]["top_md"] is None
+
+
+def test_context_depth_not_on_the_page_is_discarded_but_the_event_kept(kg_context, tmp_path):
+    client = FakeClient({"string stalled out": {"events": [
+        context_event(event_type="pack_off", context_top_md=3333.0, hole_size_stated='12 1/4"',
+                      text_span="The hole packed off and the string had to be worked free."),
+    ]}})
+    stats = run(kg_context, client, tmp_path)
+    assert stats["events_written"] == 1 and stats["context_depths_discarded"] == 1
+    (e,) = GraphStore(kg_context).query_events(event_type="pack_off")["results"]
+    assert e["depth_basis"] == "none" and e["context_top_md"] is None
+    assert e["hole_diameter_in"] == 12.25  # from the page's own section heading
+
+
+def test_time_breakdown_rows_are_dropped(kg, tmp_path):
+    client = FakeClient({"Lost returns": {"events": [
+        event(), event(top_md=None, base_md=None, text_span="1 Hour KT - Mud losses"),
+    ]}})
+    # the quote check would also drop it; the time-breakdown rule fires first and is counted
+    stats = run(kg, client, tmp_path)
+    assert stats["events_written"] == 1
+    assert stats["drop_reasons"] == {"time_breakdown_row": 1}
+
+
+def test_merge_prefers_the_row_with_a_stated_depth():
+    a = {**row("a", None, 0.9), "depth_basis": "context_point", "context_top_md": 2620.0}
+    b = {**row("b", 2622.0, 0.5), "depth_basis": "stated", "context_top_md": None}
+    c = {**row("c", None, 0.9), "depth_basis": "context_interval", "context_top_md": 2400.0}
+    assert sorted(r["event_id"] for r in merge_duplicates([a, b, c])) == ["b", "c"]

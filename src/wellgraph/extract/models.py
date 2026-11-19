@@ -17,6 +17,7 @@ from wellgraph.extract.units import (
     DEPTH_RANGE_M,
     MUD_WEIGHT_RANGE_SG,
     find_measurements,
+    parse_hole_size_in,
     parse_mud_weight,
 )
 from wellgraph.graph.schema import DEPTH_REFS, EVENT_TYPES, MUD_WEIGHT_KINDS, TABLES
@@ -64,6 +65,29 @@ class ExtractedEvent(BaseModel):
         description="Depth reference, only if the page states it for this depth: MD "
         "(measured depth, e.g. 'mMD', 'm MD RKB'), TVD or TVDSS. null if no reference is "
         "written (the usual case).",
+    )
+    context_top_md: float | None = Field(
+        default=None,
+        gt=DEPTH_RANGE_M[0],
+        le=DEPTH_RANGE_M[1],
+        description="Only when top_md is null: the depth the page gives as context for the "
+        "event, in metres. For a single context depth (the depth in the preceding sentences, "
+        "or the depth column of the daily-report row) set context_top_md and context_base_md "
+        "to it. For an interval (the section or interval the paragraph or heading says is "
+        "being drilled or described) give its shallow end here. null if the page gives none.",
+    )
+    context_base_md: float | None = Field(
+        default=None,
+        gt=DEPTH_RANGE_M[0],
+        le=DEPTH_RANGE_M[1],
+        description="Deep end of the context interval, or the same value as context_top_md "
+        "for a single context depth. null if the page gives none.",
+    )
+    hole_size_stated: str | None = Field(
+        default=None,
+        description="Hole size of the section the event is in, exactly as the page writes it "
+        "in the heading or sentence, e.g. '17 1/2\"' or '12 1/4 in'. null unless the page "
+        "states it. Never inferred.",
     )
     mud_weight_raw: str | None = Field(
         default=None,
@@ -119,7 +143,7 @@ class ExtractedEvent(BaseModel):
             data["confidence"] = words.get(data["confidence"].strip().lower(), data["confidence"])
         return data
 
-    @field_validator("remedy", "lesson", "mud_weight_raw", mode="after")
+    @field_validator("remedy", "lesson", "mud_weight_raw", "hole_size_stated", mode="after")
     @classmethod
     def _blank_is_none(cls, value: str | None) -> str | None:
         return value or None
@@ -134,6 +158,15 @@ class ExtractedEvent(BaseModel):
             # Reports give intervals in the direction of travel ("tight at 1121-1110" while
             # pulling out), so a reversed pair is the same interval, not an error.
             self.top_md, self.base_md = self.base_md, self.top_md
+        # Context depth: same tidy-up, and it is only kept when there is no stated depth.
+        if self.top_md is not None:
+            self.context_top_md = self.context_base_md = None
+        elif self.context_top_md is None and self.context_base_md is not None:
+            self.context_top_md = self.context_base_md
+        elif self.context_base_md is None and self.context_top_md is not None:
+            self.context_base_md = self.context_top_md
+        if self.context_top_md is not None and self.context_base_md < self.context_top_md:
+            self.context_top_md, self.context_base_md = self.context_base_md, self.context_top_md
         return self
 
     # ---- values decided in code, not by the model
@@ -146,9 +179,29 @@ class ExtractedEvent(BaseModel):
         return None if value is None else round(value, 3)
 
     @property
+    def resolved_depth_basis(self) -> str:
+        """stated, context_point, context_interval or none (see schema.yaml depth_bases)."""
+        if self.top_md is not None:
+            return "stated"
+        if self.context_top_md is None:
+            return "none"
+        return "context_point" if self.context_top_md == self.context_base_md else "context_interval"
+
+    @property
+    def join_interval(self) -> tuple[float | None, float | None]:
+        """Interval to use for depth joins: the stated depth, else the context depth."""
+        if self.top_md is not None:
+            return self.top_md, self.base_md
+        return self.context_top_md, self.context_base_md
+
+    @property
+    def stated_hole_diameter_in(self) -> float | None:
+        return parse_hole_size_in(self.hole_size_stated) if self.hole_size_stated else None
+
+    @property
     def resolved_depth_ref(self) -> str | None:
         """Stated reference, ASSUMED_MD when a depth has none, None when there is no depth."""
-        if self.top_md is None:
+        if self.top_md is None and self.context_top_md is None:
             return None
         return self.depth_ref or ASSUMED_MD
 
@@ -221,7 +274,7 @@ def validate_against_page(event: ExtractedEvent, page_text: str) -> list[str]:
     bare = _bare_numbers(page)
 
     depths = [m.value for m in measurements if m.kind == "depth"]
-    for name in ("top_md", "base_md"):
+    for name in ("top_md", "base_md", "context_top_md", "context_base_md"):
         value = getattr(event, name)
         if value is None:
             continue
@@ -258,12 +311,18 @@ def _depth_key(value: float | None) -> str:
 
 
 def event_id(
-    document_id: str, page_no: int, event_type: str, top_md: float | None, base_md: float | None
+    document_id: str, page_no: int, event_type: str, top_md: float | None,
+    base_md: float | None, text_span: str | None = None,
 ) -> str:
-    """Deterministic id: same document, page, type and depths -> same id on every run."""
-    key = "|".join(
-        [str(document_id), str(page_no), event_type, _depth_key(top_md), _depth_key(base_md)]
-    )
+    """Deterministic id: same document, page, type and depths -> same id on every run.
+
+    An event without a stated depth is told apart by its quote instead; otherwise two such
+    events of one type on one page would share an id and one would be lost.
+    """
+    parts = [str(document_id), str(page_no), event_type, _depth_key(top_md), _depth_key(base_md)]
+    if top_md is None and text_span:
+        parts.append(" ".join(text_span.split()))
+    key = "|".join(parts)
     return "ev-" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
 
 
@@ -282,7 +341,8 @@ def to_event_row(
     time; a column this function does not know raises KeyError instead of drifting silently.
     """
     row = {
-        "event_id": event_id(document_id, page_no, event.event_type, event.top_md, event.base_md),
+        "event_id": event_id(document_id, page_no, event.event_type, event.top_md,
+                             event.base_md, event.text_span),
         "wellbore_id": wellbore_id,
         "event_type": event.event_type,
         "top_md": event.top_md,
@@ -300,5 +360,8 @@ def to_event_row(
         "depth_ref": event.resolved_depth_ref,
         "mud_weight_raw": event.mud_weight_raw,
         "mud_weight_kind": event.resolved_mud_weight_kind,
+        "depth_basis": event.resolved_depth_basis,
+        "context_top_md": event.context_top_md,
+        "context_base_md": event.context_base_md,
     }
     return {column: row[column] for column in TABLES["event"]}

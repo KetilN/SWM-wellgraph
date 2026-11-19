@@ -296,6 +296,7 @@ def test_json_schema_is_well_formed():
     assert set(ev["properties"]) == {
         "event_type", "top_md", "base_md", "depth_ref", "mud_weight_raw", "mud_weight_sg",
         "mud_weight_kind", "description", "remedy", "lesson", "text_span", "confidence",
+        "context_top_md", "context_base_md", "hole_size_stated",
     }
     refs = next(o for o in ev["properties"]["depth_ref"]["anyOf"] if "enum" in o)["enum"]
     assert refs == ["MD", "TVD", "TVDSS"]  # ASSUMED_MD is never offered to the model
@@ -370,3 +371,52 @@ def test_worded_confidence_is_mapped_and_unknown_words_still_fail():
 def test_converted_mud_weight_is_rounded():
     e = event(mud_weight_sg=None, mud_weight_raw="10.0 ppg", mud_weight_kind="mud_in_hole")
     assert e.resolved_mud_weight_sg == 1.198
+
+
+# --- stated depth versus context depth -----------------------------------------------
+
+def test_depth_basis_and_join_interval():
+    stated = event(top_md=2500.0, base_md=2500.0, context_top_md=2400.0, context_base_md=2900.0)
+    assert stated.resolved_depth_basis == "stated" and stated.join_interval == (2500.0, 2500.0)
+    assert stated.context_top_md is None  # context is dropped when the event has its own depth
+
+    point = event(top_md=None, base_md=None, context_top_md=1277.0)
+    assert point.resolved_depth_basis == "context_point"
+    assert point.join_interval == (1277.0, 1277.0) and point.resolved_depth_ref == "ASSUMED_MD"
+
+    interval = event(top_md=None, base_md=None, context_top_md=2545.0, context_base_md=1938.0)
+    assert interval.resolved_depth_basis == "context_interval"
+    assert interval.join_interval == (1938.0, 2545.0)  # reversed pair is swapped
+
+    nothing = event(top_md=None, base_md=None)
+    assert nothing.resolved_depth_basis == "none" and nothing.join_interval == (None, None)
+    assert nothing.resolved_depth_ref is None
+
+
+def test_stated_hole_size_is_parsed_only_when_given():
+    assert event(hole_size_stated='17 1/2"').stated_hole_diameter_in == 17.5
+    assert event(hole_size_stated=" ").stated_hole_diameter_in is None
+    assert event().stated_hole_diameter_in is None
+
+
+def test_event_row_carries_basis_and_context():
+    e = event(top_md=None, base_md=None, context_top_md=1938.0, context_base_md=2545.0)
+    r = to_event_row(e, 1, "doc", 3, 17.5, ["ROGALAND GP"])
+    assert (r["top_md"], r["depth_basis"]) == (None, "context_interval")
+    assert (r["context_top_md"], r["context_base_md"]) == (1938.0, 2545.0)
+
+
+def test_two_depthless_events_of_one_type_on_a_page_get_different_ids():
+    a = to_event_row(event(top_md=None, base_md=None, text_span="Tight spots reamed."), 1, "d", 3, None, [])
+    b = to_event_row(event(top_md=None, base_md=None, text_span="Hole was tight again."), 1, "d", 3, None, [])
+    assert a["event_id"] != b["event_id"]
+
+
+def test_context_depth_must_also_be_on_the_page():
+    e = event(top_md=None, base_md=None, context_top_md=1277.0, mud_weight_sg=None,
+              mud_weight_raw=None, mud_weight_kind=None,
+              text_span="The hole packed off and the string stalled out repeatedly.")
+    page = "At 1277 m the string stalled out. The hole packed off and the string stalled out repeatedly."
+    assert validate_against_page(e, page) == []
+    problems = validate_against_page(e, page.replace("1277", "999"))
+    assert any(p.startswith("context_top_md_not_on_page") for p in problems)

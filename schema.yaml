@@ -95,11 +95,11 @@ tables:
       event_id: {type: VARCHAR, description: Stable id derived from document, page, type and depths}
       wellbore_id: {type: BIGINT, description: NPD wellbore id}
       event_type: {type: VARCHAR, description: One of event_types}
-      top_md: {type: DOUBLE, unit: m, description: Top of the affected interval (see depth_ref)}
-      base_md: {type: DOUBLE, unit: m, description: Base of the affected interval (see depth_ref)}
+      top_md: {type: DOUBLE, unit: m, description: "Top of the affected interval, only when the report states the depth for the event itself (see depth_ref, depth_basis)"}
+      base_md: {type: DOUBLE, unit: m, description: Base of the affected interval; equal to top_md for a single depth}
       mud_weight_sg: {type: DOUBLE, unit: sg, description: Mud weight converted to specific gravity}
-      hole_diameter_in: {type: DOUBLE, unit: in, description: "From a depth join against hole_section; null for TVD depths"}
-      formations: {type: "VARCHAR[]", description: "Every unit, any level, containing the depth; from a depth join against formation_top"}
+      hole_diameter_in: {type: DOUBLE, unit: in, description: "From a depth join against hole_section, using the stated depth or else the context depth; when there is no depth, the hole size the page states for the section; null for TVD depths"}
+      formations: {type: "VARCHAR[]", description: "Every unit, any level, containing the depth or overlapping the interval; from a depth join against formation_top. Approximate unless depth_basis is stated"}
       description: {type: VARCHAR, description: What happened}
       remedy: {type: VARCHAR, description: What was done about it}
       lesson: {type: VARCHAR, description: Lesson learned, when the report states one}
@@ -110,6 +110,9 @@ tables:
       depth_ref: {type: VARCHAR, description: One of depth_refs}
       mud_weight_raw: {type: VARCHAR, description: "Mud weight as written in the report, e.g. 10.5 ppg"}
       mud_weight_kind: {type: VARCHAR, description: One of mud_weight_kinds}
+      depth_basis: {type: VARCHAR, description: One of depth_bases; says how far top_md / base_md and the depth joins can be trusted}
+      context_top_md: {type: DOUBLE, unit: m, description: "Top of the depth context the page gives around the event (preceding sentence, daily-report row or section interval); null when the event has its own stated depth or the page gives none"}
+      context_base_md: {type: DOUBLE, unit: m, description: Base of the depth context; equal to context_top_md for a single depth}
 
 extra_tables:
 
@@ -156,6 +159,12 @@ enums:
     TVD: Stated as true vertical depth; not joined against measured-depth tables
     TVDSS: Stated as true vertical depth subsea; not joined against measured-depth tables
     ASSUMED_MD: No reference written in the report; treated as measured depth
+
+  depth_bases:
+    stated: The report gives the depth for the event itself, in the same sentence or table row
+    context_point: Depth taken from the surrounding narrative or the daily-report row; the event is at or near it
+    context_interval: Only the interval being drilled or described is known; the event is somewhere inside it
+    none: The page gives no usable depth
 
   mud_weight_kinds:
     mud_in_hole: Static mud weight in use when the event happened

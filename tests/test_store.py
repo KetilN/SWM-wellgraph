@@ -73,7 +73,7 @@ def test_well_summary_joins_backbone_and_events(store):
     assert s["wellbore"]["operator"] == "Alpha Oil"
     assert [f["formation"] for f in s["formation_tops"]] == ["NORDLAND GP", "SHETLAND GP", "TOR FM"]
     assert [h["hole_diameter_in"] for h in s["hole_sections"]] == [17.5, 12.25]
-    assert s["event_counts"] == {"lost_circulation": 1}
+    assert s["event_counts"] == {"lost_circulation": 1, "pack_off": 1}
     assert s["documents"][0]["document_id"] == "doc-1"
 
 
@@ -92,7 +92,7 @@ def test_query_events_demo_question(store):
 
 def test_query_events_formation_matches_child_unit(store):
     out = store.query_events(formation="Tor Formation")
-    assert {e["event_id"] for e in out["results"]} == {"ev-1", "ev-2"}
+    assert {e["event_id"] for e in out["results"]} == {"ev-1", "ev-2", "ev-6"}
 
 
 def test_query_events_by_wellbore_and_mud_weight(store):
@@ -147,7 +147,7 @@ def test_evidence_unknown_id(store):
 
 def test_describe_reports_counts_and_coverage(store):
     d = store.describe()
-    assert d["counts"]["wellbore"] == 4 and d["counts"]["event"] == 5
+    assert d["counts"]["wellbore"] == 4 and d["counts"]["event"] == 6
     assert d["coverage"]["wellbores_with_events"] == 3
     assert "lost_circulation" in d["event_types"]
 
@@ -215,3 +215,30 @@ def test_resolve_technical_sidetrack_falls_back_to_parent(store):
     wb = store.resolve_wellbore("99/1-2 AT2")
     assert wb["name"] == "99/1-2 A" and wb["matched_as_sidetrack_of"] == "99/1-2 A"
     assert store.resolve_wellbore("99/1-1 T3")["name"] == "99/1-1"
+
+
+# --- stated depth versus context depth -----------------------------------------------
+
+def test_context_depth_event_is_found_by_section_and_flagged(store):
+    out = store.query_events(event_type="pack_off", hole_size="12 1/4")
+    (e,) = out["results"]
+    assert e["depth_basis"] == "context_interval" and e["top_md"] is None
+    assert (e["context_top_md"], e["context_base_md"]) == (2400.0, 2900.0)
+
+
+def test_exact_depth_only_filter_excludes_context_events(store):
+    all_ids = {e["event_id"] for e in store.query_events(wellbore="99/1-1")["results"]}
+    exact = {e["event_id"] for e in store.query_events(wellbore="99/1-1", exact_depth_only=True)["results"]}
+    assert all_ids == {"ev-1", "ev-6"} and exact == {"ev-1"}
+
+
+def test_describe_explains_depth_bases(store):
+    bases = store.describe()["depth_bases"]
+    assert list(bases) == ["stated", "context_point", "context_interval", "none"]
+    assert all(bases.values())
+
+
+def test_evidence_shows_basis_context_and_joins(store):
+    ev = store.evidence("ev-6")
+    assert ev["depth_basis"] == "context_interval" and ev["context_base_md"] == 2900.0
+    assert ev["hole_diameter_in"] == 12.25 and ev["formations"] == ["SHETLAND GP", "TOR FM"]

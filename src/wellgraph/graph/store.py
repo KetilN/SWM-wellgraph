@@ -15,6 +15,7 @@ import duckdb
 
 from .schema import (
     ATTRIBUTION,
+    DEPTH_BASIS_DOCS,
     DEPTH_REFS,
     EVENT_TYPES,
     MUD_WEIGHT_KINDS,
@@ -215,6 +216,7 @@ class GraphStore:
             },
             "event_types": EVENT_TYPES,
             "depth_refs": DEPTH_REFS,
+            "depth_bases": DEPTH_BASIS_DOCS,
             "mud_weight_kinds": MUD_WEIGHT_KINDS,
             "events_by_type": {r["event_type"]: r["n"] for r in by_type},
             "units": {
@@ -333,6 +335,7 @@ class GraphStore:
     def _event_filter(
         self, event_type, formation, hole_size, wellbore, origin, radius_km,
         include_reference, min_mud_weight_sg, max_mud_weight_sg, mud_weight_kind=None,
+        exact_depth_only=False,
     ) -> tuple[str, list[Any], str]:
         where, params = ["true"], []
         distance = "null"
@@ -363,6 +366,8 @@ class GraphStore:
             if origin[2] is not None and not include_reference:
                 where.append("e.wellbore_id <> ?")
                 params.append(origin[2])
+        if exact_depth_only:
+            where.append("e.depth_basis = 'stated'")
         if mud_weight_kind:
             kind = mud_weight_kind.strip().lower()
             if kind not in MUD_WEIGHT_KINDS:
@@ -394,6 +399,7 @@ class GraphStore:
         min_mud_weight_sg: float | None = None,
         max_mud_weight_sg: float | None = None,
         mud_weight_kind: str | None = None,
+        exact_depth_only: bool = False,
         limit: int | None = None,
     ) -> dict[str, Any]:
         limit = _clamp(limit)
@@ -401,18 +407,20 @@ class GraphStore:
         clause, params, distance = self._event_filter(
             event_type, formation, hole_size, wellbore, origin, radius_km,
             include_reference, min_mud_weight_sg, max_mud_weight_sg, mud_weight_kind,
+            exact_depth_only,
         )
         base = f"from event e join wb w using (wellbore_id) where {clause}"
         total = self._scalar(f"select count(*) {base}", params)
         rows = self._rows(
             f"""
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
-                   e.depth_ref, e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.depth_basis, e.context_top_md, e.context_base_md, e.depth_ref,
+                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
                    e.hole_diameter_in, e.formations, e.description,
                    e.remedy, e.lesson, round({distance}, 2) as distance_km,
                    e.document_id, e.page_no, e.confidence
             {base}
-            order by distance_km nulls last, w.name, e.top_md
+            order by distance_km nulls last, w.name, coalesce(e.top_md, e.context_top_md)
             limit {limit}
             """,
             params,
@@ -463,8 +471,9 @@ class GraphStore:
                    min(e.mud_weight_sg) filter (where {static}) as min_mud_weight_sg,
                    max(e.mud_weight_sg) filter (where {static}) as max_mud_weight_sg,
                    max(e.mud_weight_sg) filter (where e.mud_weight_kind = 'ecd') as max_ecd_sg,
-                   round(min(e.top_md), 1) as shallowest_md,
-                   round(max(e.base_md), 1) as deepest_md,
+                   count(*) filter (where e.depth_basis = 'stated') as events_with_exact_depth,
+                   round(min(coalesce(e.top_md, e.context_top_md)), 1) as shallowest_md,
+                   round(max(coalesce(e.base_md, e.context_base_md)), 1) as deepest_md,
                    list(distinct w.name order by w.name) as wellbores,
                    list(e.event_id order by e.event_id) as event_ids
             from event e join wb w using (wellbore_id) where {clause}
@@ -491,8 +500,9 @@ class GraphStore:
         rows = self._rows(
             """
             select e.event_id, w.name as wellbore, e.event_type, e.top_md, e.base_md,
-                   e.depth_ref, e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
-                   e.text_span, e.page_no, e.confidence,
+                   e.depth_basis, e.context_top_md, e.context_base_md, e.depth_ref,
+                   e.mud_weight_sg, e.mud_weight_raw, e.mud_weight_kind,
+                   e.hole_diameter_in, e.formations, e.text_span, e.page_no, e.confidence,
                    e.document_id, d.title, d.relative_path, d.n_pages,
                    p.summary as page_summary, p.quality as page_quality, p.text as page_text
             from event e join wb w using (wellbore_id)
