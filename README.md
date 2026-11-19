@@ -49,7 +49,19 @@ claude mcp add wellgraph -e PYTHONPATH=src -e WELLGRAPH_KG_DIR=data/kg -- uv run
 PYTHONPATH=src uv run python -m wellgraph.mcp_server --http --port 7860
 ```
 
-Then connect to `http://localhost:7860/mcp`. A public hosted endpoint is planned.
+Then connect to `http://localhost:7860/mcp`.
+
+**Hosted (temporary, hackathon environment)**
+
+- MCP endpoint: `https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp`
+- Web page: <https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/>
+
+```bash
+claude mcp add --transport http wellgraph https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp
+```
+
+It holds a small slice: the whole SODIR backbone and 10 reports. See
+[docs/deploy-azure.md](docs/deploy-azure.md).
 
 The agent needs no other documentation: the server's instructions and the
 `describe_graph` tool tell it what the graph holds and how to query it.

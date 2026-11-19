@@ -11,7 +11,7 @@ Connect to the MCP server; do not parse the repository files.
 - Local, stdio: `uv run --directory <repo> python -m wellgraph.mcp_server`
   with environment `PYTHONPATH=src` and `WELLGRAPH_KG_DIR=<folder of Parquet files>`.
 - Local, HTTP: add `--http --port 7860`, then use `http://localhost:7860/mcp`.
-- Hosted endpoint: planned, not yet available.
+- Hosted (temporary, hackathon environment): `https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp`
 
 Once connected:
 

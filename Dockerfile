@@ -7,6 +7,12 @@
 #   docker build --build-arg KG_URL=https://.../wellgraph-kg.tar.gz -t wellgraph-mcp .
 #   docker run --rm -p 7860:7860 wellgraph-mcp
 #
+# Or put the Parquet files in a kg/ folder next to this Dockerfile (note that .dockerignore
+# excludes *.parquet, so build from a staging copy without it):
+#
+#   git archive HEAD | tar -x -C /tmp/wg && cp -R data/kg /tmp/wg/kg && rm /tmp/wg/.dockerignore
+#   docker build -t wellgraph-mcp /tmp/wg
+#
 # Or build without data and mount a local graph folder:
 #
 #   docker build -t wellgraph-mcp .
@@ -29,6 +35,11 @@ RUN uv sync --frozen --no-dev --no-install-project && rm -rf /root/.cache
 COPY schema.yaml ontology.yaml ./
 COPY src ./src
 
+# Graph data, either way:
+#   - a kg/ folder of Parquet files in the build context is copied in (schema.yaml is
+#     listed first only so this COPY still succeeds when there is no kg/ folder), or
+#   - KG_URL points at a .tar.gz of them.
+COPY schema.yaml kg* /app/kg/
 ARG KG_URL=""
 RUN mkdir -p /app/kg \
  && if [ -n "$KG_URL" ]; then \

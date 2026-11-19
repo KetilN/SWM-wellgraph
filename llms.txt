@@ -6,7 +6,7 @@
 > end-of-well reports, each with a page-level citation.
 
 To use it, connect an MCP client to the server and call `describe_graph` first. The
-server is self-describing. Hosted endpoint: planned. Local run:
+server is self-describing. Hosted endpoint (temporary): https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp . Local run:
 `PYTHONPATH=src uv run python -m wellgraph.mcp_server` (stdio) or add `--http --port 7860`
 and connect to `http://localhost:7860/mcp`.
 
