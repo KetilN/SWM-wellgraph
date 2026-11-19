@@ -42,6 +42,8 @@ from wellgraph import progress
 
 log = logging.getLogger(__name__)
 
+FLUSH_EVERY_REPORTS = 200
+
 DOCUMENT_STAGING_COLUMNS: dict[str, str] = {
     "document_id": "VARCHAR",
     "wellbore_name": "VARCHAR",
@@ -185,51 +187,72 @@ def iter_reports(root: str | os.PathLike) -> Iterator[Report]:
 def write_staging(reports: Iterable[Report], out_dir: str | os.PathLike) -> dict[str, int]:
     """Write document_staging.parquet and page.parquet to out_dir. Returns row counts.
 
-    Reports are consumed one at a time and buffered in a temporary on-disk DuckDB file,
-    so memory use stays flat for the full dataset.
+    Reports are consumed one at a time. Pages are flushed every few hundred reports to
+    compressed Parquet part files in a temporary folder, so neither memory nor temporary
+    disk space grows with the uncompressed text of the full dataset.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    page_types = ", ".join(f"cast({c} as {t}) as {c}" for c, t in PAGE_COLUMNS.items())
+    documents: list[tuple] = []
+    buffer: dict[str, list] = {c: [] for c in PAGE_COLUMNS}
     with tempfile.TemporaryDirectory(prefix="wellgraph_staging_") as tmp:
-        con = duckdb.connect(str(Path(tmp) / "staging.duckdb"))
+        con = duckdb.connect()
+        parts = 0
+
+        def flush() -> None:
+            nonlocal parts
+            if not buffer["document_id"]:
+                return
+            df = pd.DataFrame(buffer)  # noqa: F841 (read by duckdb through replacement scan)
+            part = str(Path(tmp) / f"page_{parts:05d}.parquet").replace("'", "''")
+            con.execute(
+                f"copy (select {page_types} from (select * replace ("
+                "case when tags = '' then []::varchar[] else string_split(tags, chr(31)) end as tags"
+                f") from df)) to '{part}' (format parquet, compression zstd)"
+            )
+            parts += 1
+            for values in buffer.values():
+                values.clear()
+
         try:
-            for table, cols in (("document", DOCUMENT_STAGING_COLUMNS), ("page", PAGE_COLUMNS)):
-                con.execute(f"create table {table} ({', '.join(f'{c} {t}' for c, t in cols.items())})")
-            for r in reports:
-                con.execute(
-                    "insert into document values (?, ?, ?, ?, ?)",
-                    [r.document_id, r.wellbore_name, r.title, r.relative_path, r.n_pages],
-                )
-                if not r.pages:
-                    continue
-                df = pd.DataFrame(  # noqa: F841 (read by duckdb through replacement scan)
-                    {
-                        "document_id": r.document_id,
-                        "page_no": [p.page_no for p in r.pages],
-                        "text": [p.text for p in r.pages],
-                        "summary": [p.summary for p in r.pages],
-                        "tags": ["\x1f".join(p.tags) for p in r.pages],
-                        "quality": [p.quality for p in r.pages],
-                        "has_tables": [p.has_tables for p in r.pages],
-                        "has_figures": [p.has_figures for p in r.pages],
-                        "n_chars": [p.n_chars for p in r.pages],
-                    }
-                )
-                con.execute(
-                    "insert into page select document_id, page_no, text, summary, "
-                    "case when tags = '' then []::varchar[] else string_split(tags, chr(31)) end, "
-                    "quality, has_tables, has_figures, n_chars from df"
-                )
-            counts = {}
-            for table, name, order in (
-                ("document", "document_staging", "document_id"),
-                ("page", "page", "document_id, page_no"),
-            ):
-                target = str(out / f"{name}.parquet").replace("'", "''")
-                con.execute(
-                    f"copy (select * from {table} order by {order}) to '{target}' (format parquet)"
-                )
-                counts[f"{table}s"] = con.execute(f"select count(*) from {table}").fetchone()[0]
+            for done, r in enumerate(reports, 1):
+                documents.append((r.document_id, r.wellbore_name, r.title, r.relative_path, r.n_pages))
+                for p in r.pages:
+                    buffer["document_id"].append(r.document_id)
+                    buffer["page_no"].append(p.page_no)
+                    buffer["text"].append(p.text)
+                    buffer["summary"].append(p.summary)
+                    buffer["tags"].append("\x1f".join(p.tags))
+                    buffer["quality"].append(p.quality)
+                    buffer["has_tables"].append(p.has_tables)
+                    buffer["has_figures"].append(p.has_figures)
+                    buffer["n_chars"].append(p.n_chars)
+                if done % FLUSH_EVERY_REPORTS == 0:
+                    flush()
+            flush()
+
+            doc_cols = ", ".join(f"{c} {t}" for c, t in DOCUMENT_STAGING_COLUMNS.items())
+            con.execute(f"create table document ({doc_cols})")
+            if documents:
+                con.executemany("insert into document values (?, ?, ?, ?, ?)", documents)
+            target = str(out / "document_staging.parquet").replace("'", "''")
+            con.execute(f"copy (select * from document order by document_id) to '{target}' "
+                        "(format parquet)")
+            target = str(out / "page.parquet").replace("'", "''")
+            if parts:
+                glob = str(Path(tmp) / "page_*.parquet").replace("'", "''")
+                source = f"read_parquet('{glob}')"
+            else:
+                page_cols = ", ".join(f"{c} {t}" for c, t in PAGE_COLUMNS.items())
+                con.execute(f"create table page ({page_cols})")
+                source = "page"
+            con.execute(f"copy (select * from {source} order by document_id, page_no) "
+                        f"to '{target}' (format parquet, compression zstd)")
+            counts = {
+                "documents": len(documents),
+                "pages": con.execute(f"select count(*) from read_parquet('{target}')").fetchone()[0],
+            }
         finally:
             con.close()
     return counts

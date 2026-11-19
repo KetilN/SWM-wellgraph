@@ -81,7 +81,7 @@ def build_documents(
             f"copy (select {page_cols} from read_parquet('{_quote(staging / 'page.parquet')}') p "
             f"join resolved r using (document_id) where r.wellbore_id is not null "
             f"order by p.document_id, p.page_no) "
-            f"to '{_quote(kg_dir / 'page.parquet')}' (format parquet)"
+            f"to '{_quote(kg_dir / 'page.parquet')}' (format parquet, compression zstd)"
         )
         documents = con.execute(
             "select count(*) from resolved where wellbore_id is not null"
