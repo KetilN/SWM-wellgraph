@@ -105,6 +105,10 @@ class _Sampler:
     def __init__(self, path: Path, log: Path | None, keep: int = 720, every: float = 5.0):
         self.path, self.log, self.keep, self.every = path, log, keep, every
         self.samples: list[dict[str, Any]] = []
+        self.kg_live, self.kg_run = Path("data/kg"), Path("data/kg_run")
+        self.inventory: Path | None = Path("data/staging/disk_wells.json")
+        self._coverage: dict[str, Any] = {}
+        self._coverage_at = 0.0
         self.lock = threading.Lock()
 
     def state(self) -> dict[str, Any]:
@@ -130,6 +134,33 @@ class _Sampler:
                 self.samples = [*self.samples, sample][-self.keep:]
             time.sleep(self.every)
 
+    def coverage(self) -> dict[str, Any]:
+        """Wells and reports: in the served graph, in this run, and in the whole dataset."""
+        if time.time() - self._coverage_at < 60:
+            return self._coverage
+        import duckdb
+
+        def count(kg: Path) -> dict[str, int] | None:
+            doc = kg / "document.parquet"
+            if not doc.is_file():
+                return None
+            escaped = str(doc).replace("'", "''")
+            wells, reports = duckdb.connect().execute(
+                f"select count(distinct wellbore_id), count(*) from read_parquet('{escaped}')"
+            ).fetchone()
+            return {"wells": wells, "reports": reports}
+
+        total = None
+        if self.inventory is not None and self.inventory.is_file():
+            wells = json.loads(self.inventory.read_text())
+            total = {"wells": len(wells), "reports": sum(w.get("n", 0) for w in wells.values())}
+        try:
+            self._coverage = {"live": count(self.kg_live), "run": count(self.kg_run), "total": total}
+        except duckdb.Error:  # a table being rewritten
+            pass
+        self._coverage_at = time.time()
+        return self._coverage
+
     def payload(self) -> dict[str, Any]:
         now, state = time.time(), self.state()
         with self.lock:
@@ -149,7 +180,7 @@ class _Sampler:
         return {
             "now": now, "state": state, "order": STAGES[:-1], "labels": LABELS, "rate": rate,
             "history": [{"t": s["t"], "rate": s["rate"]} for s in history],
-            "failed": failed, "alive": alive,
+            "failed": failed, "alive": alive, "coverage": self.coverage(),
             "free_gb": shutil.disk_usage(self.path.parent if self.path.parent.is_dir() else ".").free / 1e9,
             "note": "Failed calls are skipped pages; a rerun picks them up from the reply cache.",
         }

@@ -55,6 +55,12 @@
   .bar { grid-column: 2 / 4; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .8s ease; }
   .step.done .bar i { background: var(--ok); }
+  .cov { display: grid; gap: 12px; }
+  .covrow { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; align-items: center; }
+  @media (max-width: 640px) { .covrow { grid-template-columns: 1fr; } }
+  .covrow .what { font-weight: 550; } .covrow .what small { display: block; font-weight: 400; color: var(--muted); }
+  .covrow .nums { font-variant-numeric: tabular-nums; }
+  .covrow .nums b { font-size: 18px; } .covrow .nums span { color: var(--muted); }
   #chart { width: 100%; height: 150px; display: block; }
   #chart text { fill: var(--muted); font-size: 11px; }
   .foot { margin-top: 12px; font-size: 12px; color: var(--muted); }
@@ -93,6 +99,11 @@
   <section class="panel">
     <h2>Stages</h2>
     <ol class="steps" id="steps"></ol>
+  </section>
+
+  <section class="panel">
+    <h2>Wells and reports</h2>
+    <div class="cov" id="cov"></div>
   </section>
 
   <section class="panel">
@@ -147,6 +158,15 @@ function draw(d) {
       <span class="name">${labels[s]}</span><span class="meta">${meta}</span>
       <span class="bar"><i style="width:${p}%"></i></span></li>`;
   }).join("");
+
+  const c = d.coverage || {}, tot = c.total;
+  const row = (what, sub, v, cls) => { if (!v) return "";
+    const p = tot ? 100 * v.wells / tot.wells : 0;
+    return `<div class="covrow"><div class="what">${what}<small>${sub}</small></div>
+      <div><div class="nums"><b>${fmt(v.wells)}</b> wells <span>· ${fmt(v.reports)} reports${tot && v !== tot ? ` · ${p.toFixed(1)}% of all wells` : ""}</span></div>
+      <div class="bar"><i style="width:${v === tot ? 100 : p}%;${cls ? "background:var(--" + cls + ")" : ""}"></i></div></div></div>`; };
+  $("cov").innerHTML = (row("Served now", "live graph on Azure", c.live, "ok") + row("This run", "being extracted", c.run, "")
+    + row("Whole dataset", "on the disk", tot, "line")) || "<span class='count'>no graph found yet</span>";
 
   const pts = d.history.filter(p => p.rate != null);
   const W = 900, H = 150, top = 12, bottom = 22;
