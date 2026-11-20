@@ -161,12 +161,13 @@ function draw(d) {
 
   const c = d.coverage || {}, tot = c.total;
   const row = (what, sub, v, cls) => { if (!v) return "";
-    const p = tot ? 100 * v.wells / tot.wells : 0;
+    const p = tot ? 100 * v.reports / tot.reports : 0;  // by report: folder count is not a well count
+    const unit = v === tot ? "well folders" : "wells";
     return `<div class="covrow"><div class="what">${what}<small>${sub}</small></div>
-      <div><div class="nums"><b>${fmt(v.wells)}</b> wells <span>· ${fmt(v.reports)} reports${tot && v !== tot ? ` · ${p.toFixed(1)}% of all wells` : ""}</span></div>
+      <div><div class="nums"><b>${fmt(v.wells)}</b> ${unit} <span>· ${fmt(v.reports)} reports${tot && v !== tot ? ` · ${p.toFixed(1)}% of all reports` : ""}</span></div>
       <div class="bar"><i style="width:${v === tot ? 100 : p}%;${cls ? "background:var(--" + cls + ")" : ""}"></i></div></div></div>`; };
   $("cov").innerHTML = (row("Served now", "live graph on Azure", c.live, "ok") + row("This run", "being extracted", c.run, "")
-    + row("Whole dataset", "on the disk", tot, "line")) || "<span class='count'>no graph found yet</span>";
+    + row("Whole dataset", "on the disk; sidetrack tracks (T2, T3) have their own folder", tot, "line")) || "<span class='count'>no graph found yet</span>";
 
   const pts = d.history.filter(p => p.rate != null);
   const W = 900, H = 150, top = 12, bottom = 22;
