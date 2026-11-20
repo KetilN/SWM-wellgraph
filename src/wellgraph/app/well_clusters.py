@@ -301,3 +301,123 @@ def _build(store: GraphStore) -> dict[str, Any]:
         },
         "clusters": out,
     }
+
+
+# ---- two clusters side by side ------------------------------------------------------------
+MIN_CHART_SAMPLES = 15  # plugs before a formation is charted or listed in the summary
+BEST_MIN_SAMPLES = 100  # plugs before a formation can be named a cluster's best unit
+BEST_MIN_WELLS = 2
+
+
+def _cluster(store: GraphStore, name: str, range_km: float, exploration_only: bool) -> dict[str, Any]:
+    ref = store.resolve_wellbore(name)
+    if ref.get("lat") is None or ref.get("lon") is None:
+        raise ValueError(f"{ref['name']} has no position in SODIR, so no cluster can be drawn around it.")
+    origin = [ref["lat"], ref["lon"]]
+    wells = store._rows("""
+        select w.wellbore_id, w.name, w.wellbore_type, nullif(trim(w.field), '') as field,
+               w.lat, w.lon, haversine_km(?, ?, w.lat, w.lon) as distance_km,
+               exists (select 1 from core_sample s where s.wellbore_id = w.wellbore_id) as has_core
+        from wb w
+        where isfinite(w.lat) and isfinite(w.lon) and haversine_km(?, ?, w.lat, w.lon) <= ?
+        order by distance_km, w.name
+    """, origin + origin + [range_km])
+    used = [w for w in wells if w["has_core"]
+            and (not exploration_only or w["wellbore_type"] == "EXPLORATION")]
+    rows: list[dict[str, Any]] = []
+    if used:
+        ids = ", ".join(str(int(w["wellbore_id"])) for w in used)
+        # the same statistics as the reservoir_quality tool gives for one wellbore
+        rows = store._rows(f"""
+            select w.name as wellbore, s.formation, count(*) as samples, count(s.kh_md) as with_kh,
+                   round(quantile_cont(s.porosity_pct, 0.1), 1) as porosity_p10,
+                   round(quantile_cont(s.porosity_pct, 0.5), 1) as porosity_p50,
+                   round(quantile_cont(s.porosity_pct, 0.9), 1) as porosity_p90,
+                   round(quantile_cont(s.kh_md, 0.5), 3) as kh_p50_md,
+                   round(quantile_cont(s.kv_md / nullif(s.kh_md, 0), 0.5), 3) as kv_over_kh_p50,
+                   round(min(s.depth_md)) as top_md, round(max(s.depth_md)) as base_md,
+                   count(*) filter (where s.kh_method = 'klinkenberg') as kh_klinkenberg,
+                   coalesce(string_agg(distinct s.kh_method, ', ' order by s.kh_method), '') as kh_methods
+            from core_sample s join wb w using (wellbore_id)
+            where s.wellbore_id in ({ids}) and s.formation is not null
+            group by 1, 2 order by min(haversine_km(?, ?, w.lat, w.lon)), w.name, min(s.depth_md)
+        """, origin)
+    for r in rows:
+        r["note"] = None
+        if r["porosity_p50"] is not None and r["porosity_p90"] is not None and r["porosity_p90"] <= 1:
+            # stored as a fraction, not per cent: left out of the porosity figures
+            r["note"] = "porosity stored as a fraction; left out"
+            r["porosity_p10"] = r["porosity_p50"] = r["porosity_p90"] = None
+        elif not r["with_kh"]:
+            r["note"] = "no permeability"
+        elif not r.pop("kh_klinkenberg"):
+            r["note"] = f"{r['kh_methods']} permeability"
+        r.pop("kh_klinkenberg", None)
+        r.pop("kh_methods", None)
+    by_formation: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        by_formation[r["formation"]].append(r)
+    pooled = []
+    for formation, group in by_formation.items():
+        with_phi = [r for r in group if r["porosity_p50"] is not None]
+        n = sum(r["samples"] for r in with_phi)
+        with_kh = [r for r in group if r["kh_p50_md"] is not None and r["kh_p50_md"] > 0 and r["with_kh"] > 0]
+        kn = sum(r["with_kh"] for r in with_kh)
+
+        def weighted(key: str, rows=with_phi, total=n) -> float | None:
+            return sum(r[key] * r["samples"] for r in rows) / total if total else None
+
+        pooled.append({
+            "formation": formation, "wellbores": len(group), "samples": sum(r["samples"] for r in group),
+            "with_kh": kn, "porosity_p10": weighted("porosity_p10"), "porosity_p50": weighted("porosity_p50"),
+            "porosity_p90": weighted("porosity_p90"),
+            "kh_p50_md": 10 ** (sum(math.log10(r["kh_p50_md"]) * r["with_kh"] for r in with_kh) / kn) if kn else None,
+            "kh_min_md": min((r["kh_p50_md"] for r in with_kh), default=None),
+            "kh_max_md": max((r["kh_p50_md"] for r in with_kh), default=None),
+            "top_md": min(r["top_md"] for r in group), "base_md": max(r["base_md"] for r in group),
+        })
+    pooled.sort(key=lambda p: p["top_md"])
+    candidates = [p for p in pooled if p["kh_p50_md"] is not None and p["porosity_p50"] is not None
+                  and p["samples"] >= BEST_MIN_SAMPLES and p["wellbores"] >= BEST_MIN_WELLS]
+    if not candidates:
+        candidates = [p for p in pooled if p["kh_p50_md"] is not None and p["porosity_p50"] is not None]
+    best = max(candidates, key=lambda p: p["kh_p50_md"], default=None)
+    most = max((p for p in pooled if p["porosity_p50"] is not None), key=lambda p: p["samples"], default=None)
+    types: dict[str, int] = defaultdict(int)
+    for w in wells:
+        types[w["wellbore_type"] or "OTHER"] += 1
+    fields = sorted({w["field"] for w in wells if w["field"]})
+    return {
+        "reference": ref["name"], "name": (ref.get("field") or "").strip().title() or ref["name"],
+        "lat": ref["lat"], "lon": ref["lon"], "range_km": range_km,
+        "wellbores": len(wells), "by_type": dict(types), "fields": fields,
+        "cored_wellbores": sorted({r["wellbore"] for r in rows}),
+        "cored_not_used": [w["name"] for w in wells if w["has_core"] and w not in used],
+        "samples": sum(r["samples"] for r in rows),
+        "wells": [{"name": w["name"], "type": w["wellbore_type"], "field": w["field"], "lat": w["lat"],
+                   "lon": w["lon"], "distance_km": round(w["distance_km"], 2), "has_core": w["has_core"],
+                   "used": w in used} for w in wells],
+        "core": rows, "formations": pooled,
+        "best_formation": best["formation"] if best else None,
+        "most_cored_formation": most["formation"] if most else None,
+    }
+
+
+def compare(store: GraphStore, a: str, b: str, range_km: float = 20.0,
+            exploration_only: bool = True) -> dict[str, Any]:
+    """Two clusters of wellbores, each every wellbore within `range_km` of a reference
+    wellbore, with core porosity and horizontal permeability per formation.
+
+    Per wellbore and formation the figures are those of the `reservoir_quality` tool
+    (percentiles of the plugs). The pooled figure for a formation is the plug-weighted mean
+    of the wellbore percentiles, and for permeability the weighted geometric mean of the
+    wellbore medians: the method of the chat analysis this view reproduces. With
+    `exploration_only`, core from development wellbores is left out, as it was there.
+    """
+    range_km = min(max(float(range_km), 1.0), 100.0)
+    return {
+        "range_km": range_km, "exploration_only": exploration_only,
+        "min_chart_samples": MIN_CHART_SAMPLES, "ranges_km": [5, 10, 20, 50],
+        "clusters": [_cluster(store, a, range_km, exploration_only),
+                     _cluster(store, b, range_km, exploration_only)],
+    }

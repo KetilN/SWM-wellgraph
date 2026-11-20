@@ -149,6 +149,7 @@ function ovDraw() {
   // counts for what is shown
   const sum = get => matching.reduce((t, w) => t + get(w), 0), count = test => matching.filter(test).length;
   const event = $("ov-event").value, withReport = count(w => w.documents), stats = [
+    [number(new Set(matching.map(w => w.name.split(" ")[0])).size), matching.length === wells.length ? "wells on the shelf" : "wells"],
     [number(matching.length), matching.length === wells.length ? "wellbores on the shelf" : `of ${number(wells.length)} wellbores match`],
     [number(withReport), `with a report (${pct(withReport, matching.length)})`],
     [number(count(w => ovEvents(w))), event ? `with ${label(event)} events` : "with extracted events"],

@@ -426,3 +426,21 @@ def test_core_neighbourhood_lists_cored_wellbores_in_range(core_store):
     assert (tor["formation"], tor["well_samples"], tor["neighbour_wellbores"], tor["neighbour_samples"]) == ("TOR FM", 12, 2, 24)
     for phi, kh, formation, wellbore, depth in wide["points"]["well"]:
         assert kh > 0 and formation == 0 and wide["point_wellbores"][wellbore] == "99/1-1" and depth >= 2450
+
+
+def test_cluster_comparison_pools_wellbore_percentiles(core_store):
+    from wellgraph.app.well_clusters import compare
+
+    out = compare(core_store, "99/1-1", "99/1-3", 200, exploration_only=False)
+    first, second = out["clusters"]
+    assert first["reference"] == "99/1-1" and second["reference"] == "99/1-3"
+    assert first["wellbores"] >= 3 and len(first["cored_wellbores"]) == 3
+    (tor,) = first["formations"]
+    assert (tor["formation"], tor["wellbores"], tor["samples"]) == ("TOR FM", 3, 36)
+    rows = [r for r in first["core"] if r["formation"] == "TOR FM"]
+    assert tor["porosity_p50"] == pytest.approx(sum(r["porosity_p50"] * r["samples"] for r in rows) / 36)
+    assert tor["kh_min_md"] <= tor["kh_p50_md"] <= tor["kh_max_md"]
+    assert first["best_formation"] == "TOR FM"
+    only_exploration = compare(core_store, "99/1-1", "99/1-3", 200)["clusters"][0]
+    assert only_exploration["cored_wellbores"] == ["99/1-1", "99/1-3"]
+    assert only_exploration["cored_not_used"] == ["99/1-2 A"]

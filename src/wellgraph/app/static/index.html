@@ -211,6 +211,22 @@
   #ov-inspector dt { color: var(--muted); }
   #ov-inspector dd { margin: 0; }
   .ov-label { font-size: 11px; font-weight: 600; color: #1d2b36; white-space: nowrap; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; pointer-events: none; }
+  .cc-controls { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 8px 0; }
+  .cc-controls label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .cc-controls label.cc-check { display: flex; align-items: center; gap: 6px; font-size: 13px; padding-bottom: 6px; }
+  .cc-controls input[type=search] { width: 190px; }
+  .cc-lede { font-size: 16px; max-width: 95ch; margin: 12px 0; }
+  .cc-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+  .cc-tiles div { background: var(--soft); border-radius: 8px; padding: 10px 12px; }
+  .cc-tiles strong { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+  .cc-tiles span { font-size: 12px; color: var(--muted); }
+  .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .cc-grid, .cc-tiles { grid-template-columns: 1fr; } }
+  #view-cluster-compare h4 { margin: 20px 0 6px; }
+  #view-cluster-compare svg { display: block; width: 100%; height: auto; overflow: visible; }
+  #view-cluster-compare svg text { font-size: 11px; fill: var(--muted); }
+  #view-cluster-compare details { margin-top: 10px; }
+  #view-cluster-compare summary { cursor: pointer; }
   .matrix-filters { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 10px 0 6px; }
   .matrix-filters label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
   .matrix-filters select { max-width: 230px; }
@@ -401,6 +417,44 @@
       <p class="small muted" id="cluster-definition"></p>
       <p class="small muted">Source: © GeoProvider, RealPore core data, CC BY 4.0. <a href="https://zenodo.org/records/4723018">Dataset record</a>. Wellbore positions and formation tops: SODIR.</p>
     </div>
+    <div class="view" id="view-cluster-compare">
+      <div class="panel-head"><div><h3 id="cc-title">Cluster comparison: porosity and permeability of two well clusters</h3>
+        <p class="small muted">A cluster is every wellbore within the chosen range of a reference wellbore. Core data from both clusters is compared formation by formation.</p></div></div>
+      <form id="cc-form" class="cc-controls" aria-label="The two clusters to compare">
+        <label><span><i class="dot" style="background:#2a78d6"></i> First wellbore</span><input id="cc-a" type="search" list="cc-wells" autocomplete="off" value="7120/9-1" required></label>
+        <label><span><i class="dot" style="background:#eb6834"></i> Second wellbore</span><input id="cc-b" type="search" list="cc-wells" autocomplete="off" value="6506/12-P-3 H" required></label>
+        <label>Range<select id="cc-range"><option value="5">5 km</option><option value="10">10 km</option><option value="20" selected>20 km</option><option value="50">50 km</option></select></label>
+        <label class="cc-check"><input type="checkbox" id="cc-all"> Include core from development wellbores</label>
+        <button type="submit" class="primary">Compare</button>
+        <datalist id="cc-wells"></datalist>
+      </form>
+      <p class="small muted" id="cc-status" role="status"></p>
+      <div id="cc-body" hidden>
+        <p class="cc-lede" id="cc-lede"></p>
+        <div class="cc-tiles" id="cc-tiles"></div>
+        <h4>Where the two clusters are</h4>
+        <div class="cc-grid">
+          <div><p class="small" id="cc-cap-0"></p><svg id="cc-map-0" viewBox="0 0 360 380" role="img" aria-label="Wellbores of the first cluster"></svg></div>
+          <div><p class="small" id="cc-cap-1"></p><svg id="cc-map-1" viewBox="0 0 360 380" role="img" aria-label="Wellbores of the second cluster"></svg></div>
+        </div>
+        <p class="legend small muted" id="cc-map-legend"></p>
+        <h4>Reservoir quality from core</h4>
+        <div class="cc-grid">
+          <div><p class="small"><strong>Porosity by formation.</strong> Bar: pooled P10 to P90. Tick: pooled median. Dots: each wellbore's median.</p><svg id="cc-phi" role="img" aria-label="Porosity by formation in the two clusters"></svg></div>
+          <div><p class="small"><strong>Horizontal permeability by formation.</strong> Tick: pooled median (log scale). Dots: each wellbore's median.</p><svg id="cc-kh" role="img" aria-label="Horizontal permeability by formation in the two clusters"></svg></div>
+        </div>
+        <h4>Against depth</h4>
+        <p class="small muted">One dot per cored wellbore and formation, at the middle of its cored interval (measured depth).</p>
+        <div class="cc-grid"><svg id="cc-dphi" viewBox="0 0 500 300" role="img" aria-label="Median porosity against depth"></svg><svg id="cc-dkh" viewBox="0 0 500 300" role="img" aria-label="Median permeability against depth"></svg></div>
+        <h4>Formation summary</h4>
+        <div class="table-scroll"><table id="cc-summary"></table></div>
+        <details><summary>All cored intervals, wellbore by wellbore</summary><div class="table-scroll"><table id="cc-rows"></table></div></details>
+        <details><summary>All wellbores in the two clusters</summary><div class="table-scroll"><table id="cc-wells-table"></table></div></details>
+        <h4>How to read this</h4>
+        <ul class="small" id="cc-notes"></ul>
+        <p class="small muted">Wells and formation tops: SODIR FactPages (NLOD 2.0). Core data: © GeoProvider https://geoprovider.no/, CC BY 4.0 (RealPore). <a href="https://zenodo.org/records/4723018">Dataset record</a></p>
+      </div>
+    </div>
     <div class="view" id="view-poroperm">
       <div class="panel-head"><div><h3 id="pptitle">Core plug porosity and permeability</h3><p class="small muted">Compare measured plugs within a formation on a logarithmic permeability scale.</p></div></div>
       <div class="filters core-filters">
@@ -499,9 +553,10 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/overview-map.js?v=22"></script>
-<script src="/static/core-overview.js?v=22"></script>
-<script src="/static/well-clusters.js?v=22"></script>
+<script src="/static/overview-map.js?v=23"></script>
+<script src="/static/core-overview.js?v=23"></script>
+<script src="/static/cluster-compare.js?v=23"></script>
+<script src="/static/well-clusters.js?v=23"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -538,7 +593,7 @@ const SECTIONS = {
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
     views: [["matrix", "Event overview"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
-    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-cluster", true]]},
+    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-cluster", true], ["cluster-compare", "Cluster comparison"]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
     views: [["model", "Model graph"], ["graph", "Data graph", true]]}
 };
@@ -677,7 +732,7 @@ function navigate(section, requestedView) {
   }
   if (needsWell && (!state.detail || state.loading)) return;
   const loaders = {matrix: loadMatrix, nearby: loadOffsets, timedepth: loadTimeDepth,
-    "core-overview": initCoreOverview, poroperm: initPoroPerm, "well-clusters": initWellClusters, graph: loadInstanceGraph, model: loadModel};
+    "core-overview": initCoreOverview, poroperm: initPoroPerm, "well-clusters": initWellClusters, "cluster-compare": initClusterCompare, graph: loadInstanceGraph, model: loadModel};
   if (loaders[view]) loaders[view]().catch(err => { if (state.view === view) showError(err); });
 }
 

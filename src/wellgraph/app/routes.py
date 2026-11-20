@@ -199,6 +199,14 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return well_clusters.neighbourhood(
             store, name, float(range_km) if range_km else well_clusters.DEFAULT_RANGE_KM)
 
+    def core_compare(request: Request):
+        a, b = _text(request, "a"), _text(request, "b")
+        if not a or not b:
+            raise ValueError("Give two wellbores: /api/core/compare?a=7120/9-1&b=6506/12-P-3 H&range_km=20")
+        range_km = _text(request, "range_km")
+        return well_clusters.compare(store, a, b, float(range_km) if range_km else 20.0,
+                                     exploration_only=_text(request, "all_wellbores") != "1")
+
     def evidence(request: Request):
         event_id = _text(request, "id")
         if not event_id:
@@ -212,6 +220,6 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
         "/api/reservoir": reservoir, "/api/poroperm": poroperm,
         "/api/core/overview": core_overview, "/api/core/filters": core_filters,
-        "/api/core/clusters": core_clusters, "/api/core/neighbours": core_neighbours,
+        "/api/core/clusters": core_clusters, "/api/core/neighbours": core_neighbours, "/api/core/compare": core_compare,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))
