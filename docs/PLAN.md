@@ -217,8 +217,11 @@ Done:
       Hole section and formation are lower than in the 794-well run because most
       development wells have no SODIR casing or formation tops to join against.
       About 5 hours at 32 parallel calls. Graph is 332 MB of Parquet (page table 319 MB);
-      every store query answers in under 0.1 s. Deployed as image v11. Report JSONs were
+      every store query answers in under 0.1 s. Deployed as image v12 (1 CPU, 2 GB). Report JSONs were
       read from a local copy in `data/staging/all` (3.6 GB).
+- [x] Live MCP endpoint tested by three independent agent sessions (docs/mcp-live-test.md):
+      cases that hold up, evidence check on 23 events, fixes made, open weak spots
+      (feet stored as metres on 6% of events, duplicated events from shared reports).
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set
