@@ -318,18 +318,43 @@ class GraphStore:
         )
         return {"wellbore": wb["name"], "rows": rows}
 
-    def event_matrix(self) -> dict[str, Any]:
-        """Events across all wells, counted by formation group and event type."""
+    def _matrix_scope(self, field, wellbore, hole_size, formation_group) -> tuple[str, list[Any]]:
+        where, params = ["true"], []
+        if field:
+            where.append("upper(trim(w.field)) = upper(trim(?))")
+            params.append(field)
+        if wellbore:
+            where.append("e.wellbore_id = ?")
+            params.append(self.resolve_wellbore(wellbore)["wellbore_id"])
+        if hole_size is not None and str(hole_size).strip():
+            where.append("abs(e.hole_diameter_in - ?) < 0.02")
+            params.append(parse_hole_size(hole_size))
+        if formation_group:
+            where.append(f"{MATRIX_GROUP_SQL} = ?")
+            params.append(formation_group)
+        return " and ".join(where), params
+
+    def event_matrix(
+        self,
+        field: str | None = None,
+        wellbore: str | None = None,
+        hole_size: str | float | None = None,
+        formation_group: str | None = None,
+    ) -> dict[str, Any]:
+        """Events counted by formation group and event type, for all wells or a selection.
+
+        `options` lists the fields, hole sizes and formation groups that have events, each
+        narrowed by the other filters that are set (the field list is never narrowed).
+        """
+        clause, params = self._matrix_scope(field, wellbore, hole_size, formation_group)
+        base = f"from event e join wb w using (wellbore_id) where {clause}"
         rows = self._rows(
-            f"""
-            select {MATRIX_GROUP_SQL} as grp, e.event_type,
-                   count(*) as n, count(distinct e.wellbore_id) as wells
-            from event e group by 1, 2
-            """
+            f"select {MATRIX_GROUP_SQL} as grp, e.event_type, count(*) as n {base} group by 1, 2",
+            params,
         )
         wells = {r["grp"]: r["n"] for r in self._rows(
-            f"select {MATRIX_GROUP_SQL} as grp, "
-            "count(distinct wellbore_id) as n from event e group by 1")}
+            f"select {MATRIX_GROUP_SQL} as grp, count(distinct e.wellbore_id) as n {base} group by 1",
+            params)}
         out: dict[str, dict[str, Any]] = {}
         for r in rows:
             entry = out.setdefault(r["grp"], {"group": r["grp"], "counts": {}, "total": 0,
@@ -337,10 +362,28 @@ class GraphStore:
             entry["counts"][r["event_type"]] = r["n"]
             entry["total"] += r["n"]
         present = {t for e in out.values() for t in e["counts"]}
+
+        def choices(column: str, **scope: Any) -> list[dict[str, Any]]:
+            c, p = self._matrix_scope(**scope)
+            return self._rows(
+                f"select {column} as value, count(*) as events from event e "
+                f"join wb w using (wellbore_id) where {c} and {column} is not null "
+                "group by 1 order by 1", p)
+
+        chosen = {"field": field, "wellbore": wellbore, "hole_size": hole_size,
+                  "formation_group": formation_group}
         return {
             "event_types": [t for t in EVENT_TYPES if t in present],
             "rows": sorted(out.values(), key=lambda e: -e["total"]),
-            "wells_with_events": self._scalar("select count(distinct wellbore_id) from event"),
+            "events": sum(e["total"] for e in out.values()),
+            "wells_with_events": self._scalar(f"select count(distinct e.wellbore_id) {base}", params),
+            "filters": {k: v for k, v in chosen.items() if v not in (None, "")},
+            "options": {
+                "field": choices("nullif(trim(w.field), '')", field=None, wellbore=None,
+                                 hole_size=None, formation_group=None),
+                "hole_size": choices("round(e.hole_diameter_in, 3)", **{**chosen, "hole_size": None}),
+                "formation_group": choices(MATRIX_GROUP_SQL, **{**chosen, "formation_group": None}),
+            },
         }
 
     def core_samples(self, wellbore: str) -> dict[str, Any]:
@@ -799,6 +842,7 @@ class GraphStore:
         limit: int | None = None,
         *,
         matrix_group: str | None = None,
+        field: str | None = None,
         _cap: int = 0,
     ) -> dict[str, Any]:
         limit = _clamp(limit, _cap)
@@ -811,6 +855,9 @@ class GraphStore:
         if matrix_group is not None:
             clause += f" and {MATRIX_GROUP_SQL} = ?"
             params.append(matrix_group)
+        if field:
+            clause += " and upper(trim(w.field)) = upper(trim(?))"
+            params.append(field)
         base = f"from event e join wb w using (wellbore_id) where {clause}"
         total = self._scalar(f"select count(*) {base}", params)
         rows = self._rows(

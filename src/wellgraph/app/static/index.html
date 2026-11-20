@@ -188,6 +188,9 @@
   #offset-map { height: 310px; margin-bottom: 12px; }
   #cluster-map { height: 420px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   .cluster-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin: 10px 0 4px; }
+  .matrix-filters { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 10px 0 6px; }
+  .matrix-filters label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .matrix-filters select { max-width: 230px; }
   .cluster-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   #view-well-clusters h4 { margin: 16px 0 6px; }
   #view-well-clusters tr.me td { font-weight: 650; }
@@ -418,6 +421,16 @@
     <div class="view" id="view-matrix">
       <h3>Reported drilling events by stratigraphic unit</h3>
       <p class="small muted">Counts are extracted observations from loaded reports. Select a unit and event type to locate source evidence.</p>
+      <div class="matrix-filters" aria-label="Which events to count">
+        <label>Field <select id="mx-field"></select></label>
+        <label>Wellbore <select id="mx-wellbore"></select></label>
+        <label>Stratigraphic unit <select id="mx-formation_group"></select></label>
+        <label>Hole size <select id="mx-hole_size"></select></label>
+        <button id="mx-well" hidden></button>
+        <button id="mx-wellfield" hidden></button>
+        <button id="mx-clear">Clear filters</button>
+      </div>
+      <p class="small" id="mx-scope" role="status"></p>
       <div id="event-mix" class="event-mix"></div>
       <div class="table-scroll"><table id="matrix"></table></div>
       <p class="small muted" id="matrixnote"></p>
@@ -429,8 +442,8 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/core-overview.js?v=16"></script>
-<script src="/static/well-clusters.js?v=16"></script>
+<script src="/static/core-overview.js?v=17"></script>
+<script src="/static/well-clusters.js?v=17"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -465,7 +478,7 @@ function depthText(e) {
 const SECTIONS = {
   wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
-    views: [["matrix", "Across the shelf"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
+    views: [["matrix", "Event overview"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
     views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-cluster", true]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
@@ -1373,12 +1386,48 @@ function instanceDetail(n) {
 }
 
 // ---- across wells -------------------------------------------------------------------
-let matrixLoaded = false, matrixRequest = 0;
+let matrixKey = null, matrixRequest = 0, matrixFilters = {field: "", wellbore: "", formation_group: "", hole_size: ""};
+const MATRIX_ALL = {field: "All fields", wellbore: "All wellbores", formation_group: "All units", hole_size: "All hole sizes"};
+function matrixControls(m) {
+  const fill = (key, values, text) => {
+    const select = $("mx-" + key);
+    select.innerHTML = `<option value="">${MATRIX_ALL[key]}</option>` + values.map(v =>
+      `<option value="${esc(String(v.value))}">${esc(text(v))}</option>`).join("");
+    select.value = matrixFilters[key];
+    if (select.value !== matrixFilters[key]) select.value = "";
+    select.onchange = () => { matrixFilters[key] = select.value; if (key === "field" && select.value) matrixFilters.wellbore = ""; loadMatrix().catch(showError); };
+  };
+  const counted = v => `${v.value} (${number(v.events)})`;
+  fill("field", m.options.field, counted);
+  // the commonest hole sizes only, in size order
+  const sizes = [...m.options.hole_size].sort((a, b) => b.events - a.events).slice(0, 14).sort((a, b) => b.value - a.value);
+  if (matrixFilters.hole_size && !sizes.some(v => String(v.value) === matrixFilters.hole_size)) sizes.push({value: +matrixFilters.hole_size, events: 0});
+  fill("hole_size", sizes, v => `${inches(v.value)} (${number(v.events)})`);
+  fill("formation_group", [...m.options.formation_group].sort((a, b) => b.events - a.events), counted);
+  const wells = [...new Set([matrixFilters.wellbore, state.well].filter(Boolean))];
+  fill("wellbore", wells.map(value => ({value})), v => v.value);
+  const well = state.well, field = state.detail?.wellbore?.field || state.detail?.field;
+  $("mx-well").hidden = !well || matrixFilters.wellbore === well;
+  $("mx-well").textContent = `Only ${well}`;
+  $("mx-well").onclick = () => { matrixFilters = {...matrixFilters, wellbore: well, field: ""}; loadMatrix().catch(showError); };
+  $("mx-wellfield").hidden = !well || !field || matrixFilters.field === field;
+  $("mx-wellfield").textContent = `Field of ${well}: ${field}`;
+  $("mx-wellfield").onclick = () => { matrixFilters = {...matrixFilters, field, wellbore: ""}; loadMatrix().catch(showError); };
+  $("mx-clear").disabled = !Object.values(matrixFilters).some(Boolean);
+  $("mx-clear").onclick = () => { matrixFilters = {field: "", wellbore: "", formation_group: "", hole_size: ""}; loadMatrix().catch(showError); };
+}
 async function loadMatrix() {
-  if (matrixLoaded) return;
-  const m = await api("/api/matrix");
-  if (state.view !== "matrix") return;
-  matrixLoaded = true;
+  const key = JSON.stringify([matrixFilters, state.well]);
+  if (matrixKey === key) return;
+  const request = ++matrixRequest;
+  const m = await api("/api/matrix", matrixFilters);
+  if (state.view !== "matrix" || request !== matrixRequest) return;
+  matrixKey = key;
+  $("drill").innerHTML = "";
+  matrixControls(m);
+  const f = matrixFilters, parts = [f.wellbore && `wellbore ${f.wellbore}`, f.field && `field ${f.field}`, f.formation_group, f.hole_size && `${inches(+f.hole_size)} hole`].filter(Boolean);
+  $("mx-scope").innerHTML = `<strong>Showing ${parts.length ? esc(parts.join(" · ")) : "all loaded reports"}:</strong> ${number(m.events)} events in ${number(m.wells_with_events)} wellbore${m.wells_with_events === 1 ? "" : "s"}.` +
+    (m.events ? "" : " No events match: widen or clear the filters.");
   const max = Math.max(1, ...m.rows.flatMap(r => Object.values(r.counts)));
   $("event-mix").innerHTML = m.event_types.map(type => [type, m.rows.reduce((total, r) => total + (r.counts[type] || 0), 0)])
     .sort((a, b) => b[1] - a[1]).map(([type, count]) =>
@@ -1387,12 +1436,12 @@ async function loadMatrix() {
     m.rows.map(r => `<tr><td><i class="sw" style="background:${stratColour(r.group)}"></i> ${esc(r.group)}</td>${m.event_types.map(t => { const n = r.counts[t] || 0;
       return `<td class="heat ${n ? "cell" : ""}" ${n ? `data-g="${esc(r.group)}" data-t="${t}"` : ""} style="background:color-mix(in srgb, ${TYPES[t]} ${Math.round(70 * n / max)}%, transparent)">${n || ""}</td>`; }).join("")}<td class="num">${r.total}</td><td class="num">${r.wells}</td></tr>`).join("");
   for (const td of $("matrix").querySelectorAll("td.cell")) td.onclick = () => drillDown(td.dataset.g, td.dataset.t).catch(showError);
-  $("matrixnote").textContent = `Select a count to list its events. ${number(m.wells_with_events)} wellbores have extracted events. Each event is counted under its first attached stratigraphic unit. An interval may overlap multiple units. Cell shading scales with the largest count.`;
+  $("matrixnote").textContent = `Select a count to list its events. Each event is counted under its first attached stratigraphic unit. An interval may overlap multiple units. Cell shading scales with the largest count shown.`;
 }
-
 async function drillDown(group, type) {
   const request = ++matrixRequest;
-  const r = await api("/api/events", {event_type: type, matrix_group: group, limit: 200});
+  const f = matrixFilters;
+  const r = await api("/api/events", {event_type: type, matrix_group: group, limit: 200, field: f.field, wellbore: f.wellbore, hole_size: f.hole_size});
   if (state.view !== "matrix" || request !== matrixRequest) return;
   const rows = r.results;
   $("drill").innerHTML = `<div class="card"><h3><span class="dot" style="background:${TYPES[type]}"></span> ${label(type)} · ${esc(group)} · ${number(r.total)} events</h3>

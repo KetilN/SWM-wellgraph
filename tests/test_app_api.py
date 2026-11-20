@@ -186,3 +186,20 @@ def test_core_neighbours_endpoint_checks_its_input(client):
     assert client.get("/api/core/neighbours").status_code == 400
     d = client.get("/api/core/neighbours", params={"name": "99/1-1", "range_km": 10}).json()
     assert d["wellbore"] == "99/1-1" and d["wells"] == [] and d["points"]["well"] == []
+
+
+def test_event_matrix_follows_field_wellbore_and_unit_filters(client):
+    everything = client.get("/api/matrix").json()
+    assert everything["filters"] == {} and everything["events"] == sum(r["total"] for r in everything["rows"])
+    alfa = client.get("/api/matrix", params={"field": "alfa"}).json()
+    assert alfa["wells_with_events"] == 2 and alfa["events"] < everything["events"]
+    assert [f["value"] for f in alfa["options"]["field"]] == ["ALFA"]  # the field list is never narrowed
+    one = client.get("/api/matrix", params={"wellbore": "99/1-1"}).json()
+    assert one["wells_with_events"] == 1 and one["filters"] == {"wellbore": "99/1-1"}
+    unit = client.get("/api/matrix", params={"formation_group": "SHETLAND GP", "hole_size": "12.25"}).json()
+    assert [r["group"] for r in unit["rows"]] == ["SHETLAND GP"]
+    listed = client.get("/api/events", params={"field": "ALFA", "matrix_group": "SHETLAND GP",
+                                               "event_type": "lost_circulation"}).json()
+    assert listed["total"] == alfa["rows"][0]["counts"]["lost_circulation"] if alfa["rows"][0]["group"] == "SHETLAND GP" else True
+    assert {e["wellbore"] for e in listed["results"]} <= {"99/1-1", "99/1-2 A"}
+    assert client.get("/api/matrix", params={"wellbore": "nope"}).status_code == 404

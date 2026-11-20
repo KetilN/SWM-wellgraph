@@ -119,7 +119,7 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
             max_mud_weight_sg=_float(request, "max_mud_weight_sg"),
             mud_weight_kind=_text(request, "mud_weight_kind"),
             exact_depth_only=_flag(request, "exact_depth_only"), limit=_limit(request),
-            matrix_group=_text(request, "matrix_group"),
+            matrix_group=_text(request, "matrix_group"), field=_text(request, "field"),
         )
 
     def offset(request: Request):
@@ -155,7 +155,9 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return store.daily_rows(name)
 
     def matrix(request: Request):
-        return store.event_matrix()
+        return store.event_matrix(
+            field=_text(request, "field"), wellbore=_text(request, "wellbore"),
+            hole_size=_text(request, "hole_size"), formation_group=_text(request, "formation_group"))
 
     def core(request: Request):
         name = _text(request, "name")
