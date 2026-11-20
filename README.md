@@ -21,7 +21,68 @@ Built at the FORCE hackathon, November 2026. Status: work in progress. See
 
 ## Use it from an agent
 
-The server speaks MCP over stdio or streamable HTTP. It is read-only.
+The server speaks MCP over stdio or streamable HTTP. It is read-only and needs no login.
+
+### Hosted endpoint (temporary, hackathon environment)
+
+```
+https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp
+```
+
+It holds the whole SODIR backbone, all 5,326 reports (79,413 drilling events) and the
+core data. An agent cannot attach an MCP server from a link pasted in a chat: register
+the address once in the client, as below. See [docs/deploy-azure.md](docs/deploy-azure.md)
+for how it is hosted.
+
+**Claude chat (claude.ai or the desktop app)**
+
+1. Open Settings, then Connectors.
+2. Choose "Add custom connector".
+3. Name it `wellgraph` and paste the address. Leave the OAuth fields empty.
+4. In a new chat, switch the connector on in the tools menu.
+
+Custom connectors depend on the plan; on a Team or Enterprise plan an owner may have to
+add it.
+
+**Claude Code**
+
+```bash
+claude mcp add --transport http wellgraph https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp
+```
+
+Start a new session afterwards; `/mcp` shows whether it connected.
+
+**GitHub Copilot in VS Code**
+
+Run "MCP: Add Server" from the command palette, choose HTTP and paste the address. Or
+create `.vscode/mcp.json` in the open folder:
+
+```json
+{
+  "servers": {
+    "wellgraph": {
+      "type": "http",
+      "url": "https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp"
+    }
+  }
+}
+```
+
+Click "Start" above the server entry, then open Copilot Chat in Agent mode and check that
+the wellgraph tools are ticked under the tools icon. If they do not appear, MCP servers
+may be switched off in the Copilot policy of the organisation that gave the licence.
+
+**A first question to try**
+
+> Use wellgraph. In block 34/10, at what mud weights did kicks and losses occur in the
+> Shetland Group? Cite the report pages.
+
+The agent needs no other documentation: the server's instructions and the
+`describe_graph` tool tell it what the graph holds and how to query it.
+
+### Local server
+
+Use this when there is no network. It reads the graph from `data/kg`.
 
 **Claude Code**
 
@@ -50,21 +111,6 @@ PYTHONPATH=src uv run python -m wellgraph.mcp_server --http --port 7860
 ```
 
 Then connect to `http://localhost:7860/mcp`.
-
-**Hosted (temporary, hackathon environment)**
-
-- MCP endpoint: `https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp`
-- Web page: <https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/>
-
-```bash
-claude mcp add --transport http wellgraph https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/mcp
-```
-
-It holds a small slice: the whole SODIR backbone and 10 reports. See
-[docs/deploy-azure.md](docs/deploy-azure.md).
-
-The agent needs no other documentation: the server's instructions and the
-`describe_graph` tool tell it what the graph holds and how to query it.
 
 ## Look at it in a browser
 
