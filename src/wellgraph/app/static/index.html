@@ -278,6 +278,8 @@
     <div class="section-head" id="workspace-heading"><div><h2 id="workspace-title"></h2><p class="muted" id="workspace-description"></p></div></div>
     <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button><button id="open-well-graph">Well data graph</button></div></div>
     <div id="well-picker" class="panel well-picker" hidden>
+      <label for="section-field">Field</label>
+      <select id="section-field" aria-label="Narrow the wellbore list to one field"></select>
       <label for="section-well" id="section-well-label">Wellbore</label>
       <input id="section-well" type="search" list="well-list" autocomplete="off" placeholder="Type a name or block, e.g. 34/10-4">
       <button id="section-well-clear">Clear</button>
@@ -452,8 +454,8 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/core-overview.js?v=18"></script>
-<script src="/static/well-clusters.js?v=18"></script>
+<script src="/static/core-overview.js?v=19"></script>
+<script src="/static/well-clusters.js?v=19"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -506,6 +508,15 @@ const hasLocation = well => Number.isFinite(well.lat) && Number.isFinite(well.lo
 const sectionWell = {wellbore: null, drilling: null, reservoir: null, knowledge: null};
 const SECTION_NAMES = {drilling: "Drilling", reservoir: "Reservoir", knowledge: "Knowledge graph"};
 const wellCache = new Map();
+const sectionField = {drilling: "", reservoir: "", knowledge: ""};  // each section's field screen
+const NO_FIELD = "(no field)";
+function fillWellList(section) {
+  const field = sectionField[section];
+  const wells = state.reportWells.filter(w => !field || (field === NO_FIELD ? !w.field : w.field === field));
+  $("well-list").innerHTML = wells.map(w =>
+    `<option value="${esc(w.name)}">${esc([w.field, w.events ? number(w.events) + " events" : "", w.has_core ? "core" : ""].filter(Boolean).join(" · "))}</option>`).join("");
+  return wells.length;
+}
 function clearWell() {
   state.wellRequest++;
   state.well = null; state.detail = null; state.core = []; state.loading = false;
@@ -524,15 +535,41 @@ function renderWellPicker(section) {
   $("section-well-label").textContent = `Wellbore for ${SECTION_NAMES[section]}`;
   if (document.activeElement !== input) input.value = current || "";
   $("section-well-clear").hidden = !current;
-  $("section-well-note").textContent = current ? "Used only in this section." : "Pick from the list. Each section keeps its own wellbore.";
+  const fieldSelect = $("section-field");
+  if (!fieldSelect.options.length) {
+    const counts = new Map();
+    for (const w of state.reportWells) counts.set(w.field || NO_FIELD, (counts.get(w.field || NO_FIELD) || 0) + 1);
+    const names = [...counts.keys()].filter(f => f !== NO_FIELD).sort((a, b) => a.localeCompare(b, "en", {numeric: true}));
+    if (counts.has(NO_FIELD)) names.push(NO_FIELD);
+    fieldSelect.innerHTML = `<option value="">All fields (${number(state.reportWells.length)})</option>` +
+      names.map(f => `<option value="${esc(f)}">${esc(f)} (${number(counts.get(f))})</option>`).join("");
+  }
+  fieldSelect.value = sectionField[section];
+  const listed = fillWellList(section);
+  fieldSelect.onchange = () => {
+    sectionField[state.section] = fieldSelect.value;
+    const n = fillWellList(state.section);
+    $("section-well-note").textContent = `${number(n)} wellbore${n === 1 ? "" : "s"} in the list.`;
+    input.value = "";
+    input.focus();
+  };
+  $("section-well-note").textContent = current ? "Used only in this section."
+    : `${number(listed)} wellbore${listed === 1 ? "" : "s"} in the list${sectionField[section] ? "" : ": choose a field first to shorten it"}.`;
   const choose = event => {
     const key = wellKey(input.value);
     if (!key) return;
-    const hit = state.reportWells.find(w => wellKey(w.name) === key);
-    if (!hit) { $("section-well-note").textContent = "Keep typing, then pick a wellbore from the list."; return; }
+    const field = sectionField[state.section];
+    const pool = state.reportWells.filter(w => !field || (field === NO_FIELD ? !w.field : w.field === field));
+    const hit = pool.find(w => wellKey(w.name) === key);
+    if (!hit) {
+      const elsewhere = field && state.reportWells.find(w => wellKey(w.name) === key);
+      $("section-well-note").textContent = elsewhere ? `${elsewhere.name} is not in ${field}: set Field to "All fields" to open it.`
+        : "Keep typing, then pick a wellbore from the list.";
+      return;
+    }
     // while typing, 34/10-1 is also the start of 34/10-13: wait for Enter or a pick from the list
     const typing = event && event.type === "input" && event.inputType === "insertText";
-    if (typing && state.reportWells.some(w => w !== hit && wellKey(w.name).startsWith(key))) {
+    if (typing && pool.some(w => w !== hit && wellKey(w.name).startsWith(key))) {
       $("section-well-note").textContent = "Press Enter for " + hit.name + ", or keep typing.";
       return;
     }
@@ -693,8 +730,6 @@ async function init() {
       api("/api/describe"), api("/api/report_wells"), api("/api/ontology"),
     ]);
     state.reportWells = reportWells.results;
-    $("well-list").innerHTML = state.reportWells.map(w =>
-      `<option value="${esc(w.name)}">${esc([w.field, w.events ? number(w.events) + " events" : "", w.has_core ? "core" : ""].filter(Boolean).join(" · "))}</option>`).join("");
     renderOverview(graph, ontology);
     initDirectory();
     await loadOverviewMap(graph.coverage.bounding_box);
