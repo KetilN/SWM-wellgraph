@@ -68,6 +68,8 @@ function renderClusterCompare(d) {
     [`${number(A.samples)} vs ${number(B.samples)}`, `Core plugs (${A.cored_wellbores.length} vs ${B.cored_wellbores.length} wellbores)`]];
   $("cc-tiles").innerHTML = tiles.map(([v, k]) => `<div><strong>${esc(v)}</strong><span>${esc(k)}</span></div>`).join("");
 
+  ccLocator(d).catch(() => { $("cc-ncs").innerHTML = ""; });
+
   // ---- cluster maps: kilometres east and north of the reference wellbore
   [A, B].forEach((c, i) => {
     const W = 360, H = 380, cx = W / 2, cy = H / 2 - 4, S = (W / 2 - 22) / (R * 1.075), colour = CC_COLOURS[i];
@@ -184,4 +186,38 @@ function renderClusterCompare(d) {
     flagged.length ? `Check these rows before comparing: ${flagged.slice(0, 12).join("; ")}${flagged.length > 12 ? "; and " + (flagged.length - 12) + " more in the table" : ""}. Air permeability reads higher than Klinkenberg-corrected values.` : "",
     `Formation names come from joining plug depths to SODIR formation tops, so a plug near a boundary can land in the neighbouring formation. Formations with fewer than ${d.min_chart_samples} plugs are not charted.`];
   $("cc-notes").innerHTML = notes.filter(Boolean).map(n => `<li>${esc(n)}</li>`).join("");
+}
+
+// Shelf locator: the coastline with both cluster circles at true size (equirectangular, true at 66° N).
+async function ccLocator(d) {
+  const layers = await (mapData || Promise.all(["land", "quadrants", "blocks", "fields"].map(name => fetch(`/static/geo/${name}.geojson`).then(r => r.json()))));
+  if (ccData !== d) return;
+  const land = layers[0], W = 330, H = 380, K = Math.cos(66 * Math.PI / 180);
+  const points = d.clusters.flatMap(c => [[c.lon, c.lat]]).concat([[1, 57], [32, 57], [1, 74.5], [32, 74.5]]);
+  const xs = points.map(p => p[0] * K), ys = points.map(p => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const scale = Math.min((W - 16) / (x1 - x0), (H - 16) / (y1 - y0)), ox = (W - (x1 - x0) * scale) / 2, oy = (H - (y1 - y0) * scale) / 2;
+  const xy = (lon, lat) => [ox + (lon * K - x0) * scale, H - oy - (lat - y0) * scale];
+  let path = "";
+  const ring = r => { r.forEach((c, i) => { const p = xy(c[0], c[1]); path += (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1); }); path += "Z"; };
+  for (const f of land.features || []) {
+    const g = f.geometry;
+    if (!g) continue;
+    for (const polygon of g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []) polygon.forEach(ring);
+  }
+  let s = `<defs><clipPath id="cc-ncs-clip"><rect x="0" y="0" width="${W}" height="${H}" rx="6"/></clipPath></defs>
+    <rect x="0" y="0" width="${W}" height="${H}" rx="6" fill="var(--sea)"/><g clip-path="url(#cc-ncs-clip)">
+    <path d="${path}" fill="var(--land)" stroke="var(--grid)" stroke-width=".6"/>`;
+  for (const [text, lon, lat] of [["North Sea", 2.6, 58.4], ["Norwegian Sea", 4, 67.6], ["Barents Sea", 29, 73.4], ["Norway", 9.5, 61.3]]) {
+    const p = xy(lon, lat);
+    s += `<text x="${p[0]}" y="${p[1]}" text-anchor="middle" font-style="italic">${text}</text>`;
+  }
+  d.clusters.forEach((c, i) => {
+    const p = xy(c.lon, c.lat), r = d.range_km / 111.19 * scale, left = p[0] > W / 2;
+    s += `<circle cx="${p[0]}" cy="${p[1]}" r="${Math.max(r, 1.5)}" fill="${CC_COLOURS[i]}" fill-opacity=".3" stroke="${CC_COLOURS[i]}" stroke-width="1.5"/>
+      <circle cx="${p[0]}" cy="${p[1]}" r="${Math.max(r + 8, 13)}" fill="none" stroke="${CC_COLOURS[i]}" stroke-dasharray="2 3"/>
+      <text x="${p[0] + (left ? -18 : 18)}" y="${p[1] - 8}" text-anchor="${left ? "end" : "start"}" style="fill:var(--ink);font-weight:600;font-size:12px;paint-order:stroke;stroke:var(--sea);stroke-width:3px">${esc(c.name)}</text>
+      <text x="${p[0] + (left ? -18 : 18)}" y="${p[1] + 6}" text-anchor="${left ? "end" : "start"}" style="paint-order:stroke;stroke:var(--sea);stroke-width:3px">${number(c.wellbores)} wellbores</text>`;
+  });
+  $("cc-ncs").innerHTML = s + "</g>";
 }
