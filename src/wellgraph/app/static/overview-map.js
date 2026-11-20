@@ -6,6 +6,7 @@ const OV_DECADES = [[1980, "before 1980", "#d6e3ee"], [1990, "1980s", "#b0cbe0"]
 const OV_TYPES = {EXPLORATION: "#16549a", DEVELOPMENT: "#a86800", OTHER: "#6b7780"};
 const OV_REGIONS = {north: [[56, 1.3], [62, 7.5]], norwegian: [[62, 1], [69.5, 14.5]], barents: [[69.5, 14], [76.5, 37]]};
 const OV_CLASSES = [[1, 5], [6, 20], [21, 60], [61, Infinity]];
+const OV_OPERATED = "#2f6fb0", OV_PARTNER = "#8db4d8", OV_LICENCE = "#9aa7b0";
 const OV_SCREENS = ["operator", "field", "type", "data", "event"];
 let ov;  // {wells, lookups, map, layers...}
 
@@ -56,12 +57,18 @@ function ovLegend(shadeBlocks) {
   else if (mode === "decade") rows = OV_DECADES.map(([, text, colour]) => row(colour, "Drilling started " + text)).join("") + row(OV_GREY, "No start date");
   else rows = OV_CLASSES.map((c, i) => row(OV_RAMP[i], `${ovClassText(c)} ${event ? label(event) + " " : ""}events`)).join("") + row("#e3e8ec", "No such events");
   rows += row(OV_GREY, "Wellbore outside the screens (small dot)");
+  if ($("ov-l-licences").checked) {
+    const company = $("ov-company").value;
+    if (company) rows += `<div><i class="sq" style="background:${OV_OPERATED}"></i>Licence operated by ${esc(company)}</div>
+      <div><i class="sq" style="background:${OV_PARTNER};border:1.5px dashed ${OV_OPERATED}"></i>Licence where it is a partner</div>`;
+    rows += `<div><i class="sq" style="background:transparent;border:1px solid ${OV_LICENCE}"></i>${company ? "Other active licence" : "Active production licence"}</div>`;
+  }
   rows += `<div><i class="sq" style="background:${css("--field")};opacity:.45"></i>Field outline</div>`;
   if (shadeBlocks) rows += OV_CLASSES.map((c, i) => row(OV_RAMP[i], `${ovClassText(c)} matching wellbores in the block`, true)).join("");
   $("ov-legend").innerHTML = rows;
 }
 function ovInspect(html) {
-  $("ov-inspector").innerHTML = html || "Hover a wellbore, field or block. Select a wellbore to open it.";
+  $("ov-inspector").innerHTML = html || "Hover a wellbore, licence, field or block. Select a wellbore to open it.";
 }
 function ovWellCard(w) {
   const events = w.events ? ov.eventTypes.map((t, i) => [t, w.events[i]]).filter(([, n]) => n).sort((a, b) => b[1] - a[1]) : [];
@@ -83,6 +90,33 @@ function ovLabels() {
   }
 }
 
+// Production licences, coloured by the chosen company's role in each.
+function ovLicences() {
+  const company = $("ov-company").value, layer = ov.licenceLayer;
+  layer.clearLayers();
+  let operated = 0, partner = 0;
+  for (const f of ov.licences.features) {
+    const p = f.properties, share = p.licensees.find(h => h[0] === company);
+    const role = !company ? "" : p.operator === company ? "operator" : share ? "partner" : "";
+    if (role === "operator") operated++;
+    if (role === "partner") partner++;
+    f.role = role;
+  }
+  ov.licenceCounts = {company, operated, partner, total: ov.licences.features.length};
+  if (!$("ov-l-licences").checked) return;
+  L.geoJSON(ov.licences, {
+    style: f => f.role === "operator" ? {color: OV_OPERATED, weight: 1.2, fillColor: OV_OPERATED, fillOpacity: .5}
+      : f.role === "partner" ? {color: OV_OPERATED, weight: 1.2, dashArray: "4 3", fillColor: OV_PARTNER, fillOpacity: .4}
+      : {color: OV_LICENCE, weight: .6, fillColor: OV_LICENCE, fillOpacity: company ? .1 : .06},
+    onEachFeature: (f, l) => l.on("mouseover", () => { const p = f.properties; ovInspect(`<strong>Production licence ${esc(p.name)}</strong><dl>
+      <dt>Area</dt><dd>${esc(p.area || "–")}</dd><dt>Phase</dt><dd>${esc((p.phase || "–").toLowerCase())}</dd><dt>Granted</dt><dd>${esc(p.granted || "–")}</dd>
+      <dt>Operator</dt><dd>${esc(p.operator || "–")}</dd>
+      <dt>Licensees</dt><dd>${p.licensees.map(([name, pct]) => `${esc(name)} ${+pct.toFixed(2)}%`).join("<br>") || "–"}</dd></dl>`); })
+  }).addTo(layer);
+  layer.eachLayer(l => l.bringToBack());
+  ov.base.forEach(l => l.bringToBack());
+}
+
 function ovDraw() {
   const {map, wells} = ov, show = id => $("ov-l-" + id).checked;
   const matching = wells.filter(ovMatches), set = new Set(matching);
@@ -95,6 +129,7 @@ function ovDraw() {
       .on("mouseover", () => ovInspect(ovWellCard(w))).on("click", () => openWell(w.name).catch(showError))
       .bindTooltip(esc(w.name)).addTo(ov.wellLayer);
   if (show("fields")) ov.fieldLayer.addTo(map).bringToBack(); else ov.fieldLayer.remove();
+  ovLicences();
   const perField = new Map();
   for (const w of matching) if (w.field) perField.set(w.field, (perField.get(w.field) || 0) + 1);
   ov.perField = perField;
@@ -120,8 +155,10 @@ function ovDraw() {
     [number(sum(ovEvents)), event ? `${label(event)} events` : "drilling events"],
     [number(count(w => w.core)), "with core measurements"],
     [number(perField.size), "fields"]];
+  const lc = ov.licenceCounts;
+  if (lc.company) stats.unshift([number(lc.operated), "licences it operates"], [number(lc.partner), "licences as partner"], [number(lc.total), "active licences, shelf"]);
   $("ov-stats").innerHTML = stats.map(([value, text]) => `<div><strong>${value}</strong><span>${esc(text)}</span></div>`).join("");
-  const chosen = OV_SCREENS.map(k => $("ov-" + k)).filter(sel => sel.value).map(sel => sel.selectedOptions[0].textContent.replace(/ \([\d,]+\)$/, ""));
+  const chosen = ["company", ...OV_SCREENS].map(k => $("ov-" + k)).filter(sel => sel.value).map(sel => sel.selectedOptions[0].textContent.replace(/ \([\d,]+\)$/, "").replace(/ — .*$/, ""));
   $("ov-scope").textContent = chosen.length ? "Showing: " + chosen.join(" · ") : "Showing every wellbore. Wellbores outside a screen stay on the map as small grey dots.";
   $("ov-clear").disabled = !chosen.length;
   $("overview-mapnote").textContent = "Select a wellbore to open it. Positions are SODIR surface locations; wellbores without a position are not drawn.";
@@ -132,7 +169,9 @@ function ovZoom(region) {
   const {map} = ov;
   map.invalidateSize();
   if (region === "selection") {
-    if (ov.matching.length) map.fitBounds(L.latLngBounds(ov.matching.map(w => [w.lat, w.lon])).pad(.08), {maxZoom: 10, animate: false});
+    const company = ov.licenceCounts.company && ov.matching.length === ov.wells.length;
+    if (company) { const b = L.latLngBounds([]); ov.licenceLayer.eachLayer(g => g.eachLayer(l => { if (l.feature.role) b.extend(l.getBounds()); })); if (b.isValid()) map.fitBounds(b.pad(.05), {animate: false}); }
+    else if (ov.matching.length) map.fitBounds(L.latLngBounds(ov.matching.map(w => [w.lat, w.lon])).pad(.08), {maxZoom: 10, animate: false});
   } else map.fitBounds(OV_REGIONS[region] || ov.shelf, {padding: [16, 16], animate: false});
 }
 
@@ -142,7 +181,8 @@ async function loadOverviewMap(bounds) {
     if (!r.ok) throw new Error("Map layer unavailable: " + name);
     return r.json();
   }));
-  const [[land, quadrants, blocks, fields], data] = await Promise.all([mapData, api("/api/map_wells")]);
+  const [[land, quadrants, blocks, fields], data, licences] = await Promise.all([mapData, api("/api/map_wells"),
+    fetch("/static/geo/licences.geojson").then(r => r.ok ? r.json() : {features: []}).catch(() => ({features: []}))]);
   const wells = data.wells.map(([name, type, operator, field, lat, lon, year, documents, core, events]) => ({
     name, type: data.types[type] || null, operator: data.operators[operator] || null, field: data.fields[field] || null,
     lat, lon, year, documents, core, events, total: events ? events.reduce((a, b) => a + b, 0) : 0}));
@@ -163,7 +203,7 @@ async function loadOverviewMap(bounds) {
     }});
   const gridLayer = L.geoJSON(blocks, {interactive: false, style: {color: css("--grid"), weight: .45, opacity: .7, fill: false}});
   map.on("zoomend", () => { if (map.getZoom() >= 7) gridLayer.addTo(map).bringToBack(); else gridLayer.remove(); if (ov) ovLabels(); });
-  ov = {map, wells, blocks, base, fieldLayer, fieldCentres, eventTypes: data.event_types, matching: wells,
+  ov = {map, wells, blocks, base, licences, licenceLayer: L.layerGroup().addTo(map), licenceCounts: {}, fieldLayer, fieldCentres, eventTypes: data.event_types, matching: wells,
     blockLayer: L.layerGroup().addTo(map), otherLayer: L.layerGroup().addTo(map), wellLayer: L.layerGroup().addTo(map), labelLayer: L.layerGroup().addTo(map),
     perField: new Map(), shelf: L.latLngBounds([56, 0.5], [74.6, 33])};
   // screens, each option with its wellbore count
@@ -178,9 +218,16 @@ async function loadOverviewMap(bounds) {
   options("ov-type", "All types", w => w.type, ovTitle);
   $("ov-event").innerHTML = '<option value="">Any</option>' + data.event_types.map((t, i) =>
     `<option value="${t}">${esc(label(t))} (${number(wells.filter(w => w.events && w.events[i]).length)})</option>`).join("");
-  for (const id of ["colour", ...OV_SCREENS]) $("ov-" + id).onchange = ovDraw;
-  for (const id of ["wells", "others", "fields", "labels", "blocks"]) $("ov-l-" + id).onchange = ovDraw;
-  $("ov-clear").onclick = () => { for (const k of OV_SCREENS) $("ov-" + k).value = ""; ovDraw(); };
+  const roles = new Map();
+  for (const f of licences.features) for (const [name] of f.properties.licensees) {
+    const r = roles.get(name) || roles.set(name, {operated: 0, partner: 0}).get(name);
+    if (f.properties.operator === name) r.operated++; else r.partner++;
+  }
+  $("ov-company").innerHTML = '<option value="">No company chosen</option>' + [...roles].sort((a, b) => b[1].operated + b[1].partner - a[1].operated - a[1].partner)
+    .map(([name, r]) => `<option value="${esc(name)}">${esc(name)} — ${r.operated} operated · ${r.partner} as partner</option>`).join("");
+  for (const id of ["colour", "company", ...OV_SCREENS]) $("ov-" + id).onchange = ovDraw;
+  for (const id of ["wells", "others", "licences", "fields", "labels", "blocks"]) $("ov-l-" + id).onchange = ovDraw;
+  $("ov-clear").onclick = () => { for (const k of ["company", ...OV_SCREENS]) $("ov-" + k).value = ""; ovDraw(); };
   for (const button of document.querySelectorAll("[data-region]")) button.onclick = () => ovZoom(button.dataset.region);
   ovDraw();
   if (state.section === "overview") ovZoom("shelf");

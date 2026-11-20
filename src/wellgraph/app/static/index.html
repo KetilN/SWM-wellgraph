@@ -262,6 +262,7 @@
     <div class="section-head"><div><h2 id="overview-title">Norwegian continental shelf</h2><p class="muted">Explore the report footprint and open a wellbore for depth, drilling and core data.</p></div><button id="browse-wellbores" class="primary">Find a wellbore</button></div>
     <div id="sources" class="source-grid" aria-label="Data sources and coverage"></div>
     <div class="panel ov-screens" aria-label="Which wellbores to show">
+      <label>Licences of company<select id="ov-company"></select></label>
       <label>Colour wellbores by<select id="ov-colour">
         <option value="data">Data available</option><option value="events">Events per wellbore</option>
         <option value="type">Wellbore type</option><option value="decade">Decade drilled</option></select></label>
@@ -290,12 +291,13 @@
         <div class="panel"><h4>Layers</h4>
           <label><input type="checkbox" id="ov-l-wells" checked> Wellbores matching the screens</label>
           <label><input type="checkbox" id="ov-l-others" checked> Other wellbores, in grey</label>
+          <label><input type="checkbox" id="ov-l-licences" checked> Production licences</label>
           <label><input type="checkbox" id="ov-l-fields" checked> Fields</label>
           <label><input type="checkbox" id="ov-l-labels" checked> Field names</label>
           <label><input type="checkbox" id="ov-l-blocks"> Shade blocks by matching wellbores</label>
         </div>
         <div class="panel"><h4>Legend</h4><div id="ov-legend" class="ov-legend small"></div></div>
-        <div class="panel"><h4>Inspector</h4><div id="ov-inspector" class="small">Hover a wellbore, field or block. Select a wellbore to open it.</div></div>
+        <div class="panel"><h4>Inspector</h4><div id="ov-inspector" class="small">Hover a wellbore, licence, field or block. Select a wellbore to open it.</div></div>
       </aside>
     </div>
   </section>
@@ -497,9 +499,9 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/overview-map.js?v=21"></script>
-<script src="/static/core-overview.js?v=21"></script>
-<script src="/static/well-clusters.js?v=21"></script>
+<script src="/static/overview-map.js?v=22"></script>
+<script src="/static/core-overview.js?v=22"></script>
+<script src="/static/well-clusters.js?v=22"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
