@@ -83,7 +83,8 @@ def test_one_call_takes_reports_to_a_queryable_graph(workspace):
     stats = run_pipeline(workspace / "reports", workspace / "kg", client,
                          cache_dir=workspace / "cache")
 
-    assert list(stats) == ["backbone", "documents", "events", "depth_pass", "daily_reports"]
+    assert list(stats) == ["backbone", "documents", "events", "depth_pass", "cleanup",
+                           "daily_reports"]
     assert stats["backbone"] == "already built"
     assert stats["documents"]["documents"] == 1 and stats["documents"]["pages"] == 2
     assert stats["events"]["events_written"] == 2

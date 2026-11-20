@@ -86,6 +86,14 @@ from the SODIR mud table, not the reports, and 8 of 11 are losses while cementin
 - A formation that matches nothing now returns a note; "Draupne Fm." matches.
 - `describe_graph` says that its block list is only the 15 largest blocks.
 
+## Fixed after the test (live in v13)
+`wellgraph.extract.cleanup` now runs after the depth pass. Feet stored as metres: 2,822
+events converted and joined again; 647 events still have a depth beyond the wellbore's
+total depth (metric pages, or a report attached to another wellbore). Shared reports: each
+event kept once, on the wellbore its page names (16,285 copies dropped). Same incident on
+several pages: merged again (4,707). The graph went from 100,405 to 79,413 events. Items 1
+and 2 below describe the state before this fix; event ids quoted above still exist.
+
 ## Open weak spots, by effect on a demo
 1. **Feet stored as metres.** 6,252 events (6 %) have a depth more than 100 m below the
    wellbore's total depth, 2,240 of them marked as stated depths. Their hole section and

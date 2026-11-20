@@ -222,6 +222,13 @@ Done:
 - [x] Live MCP endpoint tested by three independent agent sessions (docs/mcp-live-test.md):
       cases that hold up, evidence check on 23 events, fixes made, open weak spots
       (feet stored as metres on 6% of events, duplicated events from shared reports).
+- [x] Event cleanup step after the depth pass (`wellgraph.extract.cleanup`, no model
+      calls, in the pipeline): depths in feet stored as metres are converted and joined
+      again (2,822 events); a report registered under several wellbores (488 reports, 993
+      wellbores) keeps each event once, on the wellbore named on its page (16,285 copies
+      dropped); duplicates merged again after the depth pass (4,707). 100,405 -> 79,413
+      events over 3,513 wellbores. Depths beyond total depth: 6,252 -> 647. Completeness:
+      some depth 86%, hole section 63%, formation 40%, mud weight 51%. Deployed as v13.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set

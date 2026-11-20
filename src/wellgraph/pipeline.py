@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from wellgraph import progress
+from wellgraph.extract.cleanup import clean_events
 from wellgraph.extract.daily import build_daily_reports
 from wellgraph.extract.depth_pass import resolve_depths
 from wellgraph.extract.run import LLMClient, OfflineClient, OpenAICompatibleClient, extract_events
@@ -74,6 +75,7 @@ def run_pipeline(
         kg_dir, client, cache_dir / "extract", max_pages_per_report, wellbores, False, workers
     )
     stats["depth_pass"] = resolve_depths(kg_dir, client, cache_dir / "depth", workers)
+    stats["cleanup"] = clean_events(kg_dir)
     progress.report("daily_reports", force=True)
     stats["daily_reports"] = build_daily_reports(kg_dir)
     progress.report("core", force=True)
