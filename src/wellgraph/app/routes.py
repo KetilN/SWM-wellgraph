@@ -16,6 +16,7 @@ from fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 
+from wellgraph.app import core_crossplot, well_clusters
 from wellgraph.graph.store import GraphStore, NotFound
 
 ONTOLOGY = Path(os.environ.get("WELLGRAPH_ONTOLOGY")
@@ -174,6 +175,16 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return store.poro_perm(formation, _text(request, "lithology"),
                                kh_method=_text(request, "kh_method"))
 
+    def core_overview(request: Request):
+        filters = {key: _text(request, key) for key in core_crossplot.FILTER_COLUMNS}
+        return core_crossplot.crossplot(store, filters, _text(request, "colour_by"))
+
+    def core_filters(request: Request):
+        return core_crossplot.options(store)
+
+    def core_clusters(request: Request):
+        return well_clusters.clusters(store)
+
     def evidence(request: Request):
         event_id = _text(request, "id")
         if not event_id:
@@ -186,5 +197,7 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/evidence": evidence, "/api/graph": graph, "/api/ontology": ontology,
         "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
         "/api/reservoir": reservoir, "/api/poroperm": poroperm,
+        "/api/core/overview": core_overview, "/api/core/filters": core_filters,
+        "/api/core/clusters": core_clusters,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

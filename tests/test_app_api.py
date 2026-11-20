@@ -170,3 +170,12 @@ def test_all_wells_graph_becomes_an_overview_when_there_are_many_wells(kg_dir):
     assert "Wellbore" in kinds and kinds <= {"Wellbore", "GeologicalFormation", "Organisation", "Field"}
     ids = {n["id"] for n in overview["nodes"]}
     assert overview["edges"] and all(e["source"] in ids and e["target"] in ids for e in overview["edges"])
+
+
+def test_well_clusters_endpoint(client):
+    d = client.get("/api/core/clusters").json()
+    assert d["definition"]["max_distance_km"] == 20.0
+    assert d["summary"]["clusters"] == len(d["clusters"])
+    for c in d["clusters"]:
+        assert (c["r"] is None) == (c["reason"] is not None)
+        assert c["span_km"] < 20.0

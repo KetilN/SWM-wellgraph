@@ -44,19 +44,28 @@
   .panel-head { margin-bottom: 12px; }
   .panel-head h3, .panel h3 { font-size: 16px; margin: 0; }
   .source-grid, .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .source-card { display: flex; flex-direction: column; gap: 3px; }
+  .source-card { padding: 12px 15px; display: grid; align-content: start; gap: 3px; }
+  .source-card h3 { font-size: 13px; }
+  .source-card p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0; }
   .source-card strong, .metric-grid strong { font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
   .source-card a { width: fit-content; font-size: 12px; }
   .source-card span, .metric-grid span { color: var(--muted); font-size: 12px; }
   .overview-grid { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(235px, 1fr); gap: 14px; }
   .bar-list { padding: 0; margin: 16px 0 0; list-style: none; }
-  .bar-list li { margin: 0 0 14px; }
+  .bar-list li { margin: 0 0 3px; }
+  .bar-list button { width: 100%; text-align: left; border-color: transparent; padding: 6px 5px; }
+  .bar-list button:hover, .bar-list button[aria-pressed=true] { background: var(--soft); border-color: var(--line); }
   .bar-list .bar-label { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
   .bar-track { height: 6px; margin-top: 5px; border-radius: 8px; background: var(--soft); overflow: hidden; }
   .bar-track i { display: block; height: 100%; background: var(--signal); border-radius: inherit; }
   .signal { background: var(--signal); }
   .report-dot { background: var(--report-dot); }
   .field-swatch { background: #c8dce7; }
+  .primary { color: white; background: #086b7c; border-color: #086b7c; font-weight: 650; }
+  .primary:hover { background: #075664; }
+  .coverage-total { padding: 10px 12px; border-radius: 8px; background: var(--soft); margin: 12px 0; }
+  .coverage-total strong { font-size: 22px; display: block; font-variant-numeric: tabular-nums; }
+  .coverage-panel h4 { margin: 0; }
   .directory { margin-bottom: 14px; }
   .directory summary { cursor: pointer; font-weight: 650; }
   .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px; margin: 14px 0; }
@@ -70,6 +79,7 @@
   .pagination { justify-content: flex-end; margin-top: 10px; }
   .pagination span { margin-right: auto; }
   .well-context { margin-bottom: 12px; }
+  .well-context h3 { font-size: 24px; }
   .well-context .facts { margin: 5px 0 0; }
   #well-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .analysis-panel { padding: 0; }
@@ -88,7 +98,30 @@
   .core-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(235px, 1fr); gap: 18px; }
   .core-grid h4 { margin: 4px 0 8px; font-size: 13px; }
   .core-grid svg, #strip { background: #fbfdfe; border: 1px solid var(--line); border-radius: 8px; }
+  .core-overview-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(205px, 245px); gap: 14px; }
+  .core-density-scroll { overflow: auto; }
+  #core-density { background: #fbfdfe; border: 1px solid var(--line); border-radius: 8px; }
+  .core-overview-stats { padding: 12px; background: var(--soft); border-radius: 8px; align-self: start; }
+  .core-overview-stats dl { margin: 8px 0 0; }
+  .core-overview-stats dt { font-size: 12px; color: var(--muted); }
+  .core-overview-stats dd { margin: 0 0 9px; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .core-overview-stats dd:last-child { margin-bottom: 0; }
+  .core-density-key { display: inline-block; width: 44px; height: 8px; border-radius: 2px; }
+  .core-overview-actions { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; }
+  .core-series { list-style: none; padding: 8px 0 0; margin: 8px 0 0; border-top: 1px solid var(--line); }
+  .core-series li { display: grid; grid-template-columns: 15px 1fr; gap: 6px; margin: 5px 0; }
+  .core-series svg { width: 14px; height: 14px; margin-top: 2px; }
+  .core-series strong { display: block; overflow-wrap: anywhere; }
   #strip { max-width: 970px; margin-inline: auto; }
+  .profile-scroll { overflow: auto; }
+  .profile-meta { max-width: 970px; margin: 0 auto 10px; }
+  .profile-window { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; }
+  .profile-window svg { flex: 1 1 240px; width: auto; max-width: 600px; }
+  #strip [data-id], #ppplot [data-plug] { cursor: pointer; }
+  #ppplot [data-plug]:hover, #ppplot [data-plug][aria-pressed=true] { stroke: var(--ink); stroke-width: 2; }
+  .plot-inspector { margin: 8px 0; min-height: 42px; display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; }
+  .plot-inspector select { min-width: 0; max-width: 100%; }
+  #pp-plug-id { margin: 0; flex: 1 1 220px; }
   #timedepth { max-width: 850px; }
   .evidence-link { padding: 0; border: 0; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
   .metric-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
@@ -108,9 +141,15 @@
   @media (max-width: 800px) {
     .app-header { gap: 8px 16px; } .app-nav { order: 3; width: 100%; } #counts { margin-left: auto; }
     .source-grid, .overview-grid, .core-grid { grid-template-columns: 1fr; }
+    .core-overview-layout { grid-template-columns: minmax(0, 1fr); }
+    #core-density { min-width: 540px; }
     .directory-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #strip { min-width: 660px; }
-    #view-strip { overflow-x: auto; }
+    .source-grid { gap: 6px; }
+    .source-card { padding: 8px 12px; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+    .source-card p { grid-column: 1; grid-row: 2; }
+    .source-card a { grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right; }
+    .source-card > span { display: none; }
   }
 
   .facts { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 12px; margin: 0 0 8px; }
@@ -147,6 +186,15 @@
   a { color: var(--accent); }
   #map, #offset-map { height: clamp(360px, 61vh, 670px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   #offset-map { height: 310px; margin-bottom: 12px; }
+  #cluster-map { height: clamp(380px, 62vh, 680px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  .cluster-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 330px); gap: 14px; margin-top: 10px; }
+  .cluster-side { padding: 12px; background: var(--soft); border-radius: 8px; align-self: start; max-height: clamp(380px, 62vh, 680px); overflow: auto; }
+  .cluster-side h4 { margin: 0 0 6px; }
+  .cluster-side table { width: 100%; font-size: 12px; }
+  .cluster-value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .cluster-ramp { display: inline-block; width: 150px; height: 10px; border-radius: 5px; border: 1px solid var(--line); }
+  .cluster-none { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1.5px dashed #6b7780; }
+  @media (max-width: 860px) { .cluster-layout { grid-template-columns: minmax(0, 1fr); } }
   .leaflet-container { font: inherit; }
   .qlabel { color: var(--grid); font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; pointer-events: none; }
   .wlabel { color: var(--ink); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none;
@@ -158,6 +206,14 @@
   .leaflet-bar a { background: var(--panel); color: var(--ink); border-color: var(--line); }
   .graphbox { background: var(--soft); border-radius: 8px; border: 1px solid var(--line); }
   .cybox { height: 62vh; min-height: 380px; resize: vertical; overflow: hidden; }
+  .graph-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 285px); gap: 12px; }
+  .graph-details { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+  .graph-details .card { border: 0; background: none; margin: 0; padding: 0; }
+  .model-relations { margin: 8px 0 0; padding: 0; list-style: none; max-height: 40vh; overflow: auto; }
+  .model-relations li + li { margin-top: 4px; }
+  .model-relations button { width: 100%; text-align: left; font-size: 12px; }
+  .model-relations small { display: block; color: var(--muted); }
+  @media (max-width: 900px) { .graph-workspace { grid-template-columns: minmax(0, 1fr); } }
   .gbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 6px 0; }
   .gbar input[type=search] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 150px; }
   .gbar .dot { margin: 0 4px 0 3px; }
@@ -170,8 +226,8 @@
   <nav class="app-nav" aria-label="Workspace">
     <button data-section="overview" aria-current="page">Overview</button>
     <button data-section="wellbore">Wellbore</button>
-    <button data-section="drilling">Drilling events</button>
-    <button data-section="reservoir">Reservoir quality</button>
+    <button data-section="drilling">Drilling</button>
+    <button data-section="reservoir">Reservoir</button>
     <button data-section="knowledge">Knowledge graph</button>
   </nav>
   <div class="sub" id="counts" role="status">Loading snapshot…</div>
@@ -179,7 +235,7 @@
 
 <main>
   <section id="overview" aria-labelledby="overview-title">
-    <div class="section-head"><div><h2 id="overview-title">Norwegian continental shelf</h2><p class="muted">Explore report coverage across the shelf, then open a wellbore to inspect its data.</p></div><button id="browse-wellbores">Find a wellbore</button></div>
+    <div class="section-head"><div><h2 id="overview-title">Norwegian continental shelf</h2><p class="muted">Explore the report footprint and open a wellbore for depth, drilling and core data.</p></div><button id="browse-wellbores" class="primary">Find a wellbore</button></div>
     <div id="sources" class="source-grid" aria-label="Data sources and coverage"></div>
     <div class="overview-grid">
       <article class="panel map-panel">
@@ -187,7 +243,13 @@
         <div id="map" aria-label="Norwegian continental shelf report coverage" role="region"></div>
         <p class="legend small muted"><span><i class="dot signal"></i>Extracted events</span><span><i class="dot report-dot"></i>Report loaded</span><span><i class="sw field-swatch"></i>Field outline</span></p>
       </article>
-      <aside class="panel coverage-panel"><h3>Report coverage by quadrant</h3><p class="small muted">Quadrants with the most report-bearing wellbores.</p><ol id="coverage-chart" class="bar-list"></ol></aside>
+      <aside class="panel coverage-panel">
+        <h3>Wellbores with reports</h3>
+        <p class="coverage-total" id="coverage-total"></p>
+        <h4>Top 10 offshore grid areas</h4>
+        <p class="small muted">A quadrant is a numbered SODIR grid area: in 25/7-2, 25 is the quadrant and 7 is the block. Select an area to zoom the map. Bars show counts on a shared scale. <a href="https://www.sodir.no/en/facts/wells/well-classification/">Well naming guide</a></p>
+        <ol id="coverage-chart" class="bar-list"></ol>
+      </aside>
     </div>
   </section>
 
@@ -197,7 +259,7 @@
       <summary>Find a report-bearing wellbore</summary>
       <div class="filters">
         <label>Wellbore name or block<input id="well-search" type="search" placeholder="e.g. 25/7 or 6507/7-8"></label>
-        <label>Quadrant<select id="filter-quadrant"></select></label>
+        <label>Offshore grid (quadrant)<select id="filter-quadrant"></select></label>
         <label>Field<select id="filter-field"></select></label>
         <label>Operator<select id="filter-operator"></select></label>
         <label>Wellbore type<select id="filter-type"></select></label>
@@ -210,7 +272,7 @@
 
   <section id="analysis-workspace" hidden aria-labelledby="workspace-title">
     <div class="section-head" id="workspace-heading"><div><h2 id="workspace-title"></h2><p class="muted" id="workspace-description"></p></div></div>
-    <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button></div></div>
+    <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button><button id="open-well-graph">Well data graph</button></div></div>
     <p id="analysis-status" class="muted" role="status"></p>
     <div id="workspace" class="panel analysis-panel">
       <div class="tabs" id="analysis-tabs" aria-label="Views"></div>
@@ -223,11 +285,53 @@
         <button type="button" id="profile-core">Cored interval</button>
         <span id="profile-status" class="small muted" role="status"></span>
       </form>
-      <svg id="strip" viewBox="0 0 920 900" role="img" aria-label="Depth chart of the selected wellbore"></svg>
-      <p class="small muted legend" id="stratlegend"></p>
+      <div class="profile-meta"><div id="profile-window" class="profile-window"></div><p class="small muted legend" id="stratlegend"></p></div>
+      <div class="profile-scroll"><svg id="strip" viewBox="0 0 920 900" role="img" aria-label="Depth chart of the selected wellbore"></svg></div>
       <p class="small muted">Depth is measured along the wellbore. SODIR mud checks and leak-off values use separate symbols.
         Event markers distinguish report-stated points, contextual points and intervals. TVD and TVDSS are available in the event log.
         Core tracks use RealPore plug measurements.</p>
+    </div>
+    <div class="view" id="view-core-overview">
+      <div class="panel-head">
+        <div><h3>Porosity–permeability cross-plot</h3><p class="small muted">All RealPore core plugs with paired measurements in this snapshot.</p></div>
+      </div>
+      <div class="filters">
+        <label>Field<select id="cross-field"></select></label>
+        <label>Formation<select id="cross-formation"></select></label>
+        <label>Rock type<select id="cross-lithology"></select></label>
+        <label>Reported grain size<select id="cross-grain_size"></select></label>
+        <label>Permeability method<select id="cross-kh_method"></select></label>
+        <label>Color points by<select id="cross-colour"><option value="lithology">Rock type</option><option value="grain_size">Grain size</option><option value="formation">Formation</option><option value="field">Field</option><option value="kh_method">Permeability method</option><option value="">Density only</option></select></label>
+      </div>
+      <div class="core-overview-actions">
+        <button id="cross-reset" disabled>Clear filters</button>
+        <label><input type="checkbox" id="cross-context" checked disabled> Show full dataset behind selection</label>
+        <label><input type="checkbox" id="cross-trends" checked> Show group trend lines</label>
+      </div>
+      <p id="cross-legend" class="legend small muted"></p>
+      <div class="core-overview-layout">
+        <div class="core-density-scroll"><svg id="core-density" viewBox="0 0 820 480" role="img" aria-label="Porosity versus horizontal permeability for paired core plug measurements"></svg></div>
+        <aside class="core-overview-stats" aria-label="Core selection summary">
+          <h4 id="cross-scope" style="margin:0">All paired core</h4>
+          <dl id="cross-stats"></dl>
+          <ul id="cross-series" class="core-series small" hidden></ul>
+        </aside>
+      </div>
+      <p class="small muted" id="cross-note" role="status"></p>
+      <p class="small muted">Source: © GeoProvider, RealPore core data, CC BY 4.0. <a href="https://zenodo.org/records/4723018">Dataset record</a></p>
+    </div>
+    <div class="view" id="view-well-clusters">
+      <div class="panel-head">
+        <div><h3>Well-clusters: do neighbouring wells agree on horizontal permeability?</h3>
+          <p class="small muted" id="cluster-summary" role="status">Loading well-clusters…</p></div>
+      </div>
+      <p class="legend small muted" id="cluster-legend"></p>
+      <div class="cluster-layout">
+        <div id="cluster-map" role="region" aria-label="Map of well-clusters coloured by between-well permeability correlation"></div>
+        <aside class="cluster-side" id="cluster-detail" aria-label="Selected well-cluster"></aside>
+      </div>
+      <p class="small muted" id="cluster-definition"></p>
+      <p class="small muted">Source: © GeoProvider, RealPore core data, CC BY 4.0. <a href="https://zenodo.org/records/4723018">Dataset record</a>. Wellbore positions and formation tops: SODIR.</p>
     </div>
     <div class="view" id="view-poroperm">
       <div class="panel-head"><div><h3 id="pptitle">Core plug porosity and permeability</h3><p class="small muted">Compare measured plugs within a formation on a logarithmic permeability scale.</p></div></div>
@@ -239,12 +343,19 @@
       </div>
       <div id="ppstats" class="metric-grid"></div>
       <p id="ppmethods" class="method-summary small muted" aria-label="Methods represented in the selected formation and rock type"></p>
-      <div class="core-grid">
-        <div><h4>Porosity–permeability cross-plot</h4><svg id="ppplot" viewBox="0 0 720 455" role="img" aria-label="Core porosity against horizontal permeability"></svg></div>
-        <div><h4>Sample distributions</h4><svg id="pphist" viewBox="0 0 360 375" role="img" aria-label="Porosity and horizontal permeability distributions"></svg></div>
-      </div>
       <p class="legend small muted" id="pplegend"></p>
       <p class="small muted" id="ppnote"></p>
+      <div class="core-grid">
+        <div><h4>Porosity–permeability cross-plot</h4>
+          <div class="plot-inspector" id="pp-inspector" hidden>
+            <select id="pp-plug" aria-label="Selected wellbore plug"></select>
+            <p id="pp-plug-id" class="small muted" role="status"></p>
+            <button id="pp-open-depth" disabled>Open depth profile</button>
+          </div>
+          <svg id="ppplot" viewBox="0 0 720 455" role="img" aria-label="Core porosity against horizontal permeability"></svg>
+        </div>
+        <div><h4>Share of plotted plugs by bin</h4><svg id="pphist" viewBox="0 0 360 375" role="img" aria-label="Porosity and horizontal permeability distributions"></svg></div>
+      </div>
       <p class="small muted">Source: © GeoProvider, RealPore core data, CC BY 4.0. <a href="https://zenodo.org/records/4723018">Dataset record</a></p>
     </div>
     <div class="view" id="view-timedepth">
@@ -255,40 +366,36 @@
     <div class="view" id="view-graph">
       <h3 id="instancetitle">Knowledge graph</h3>
       <div class="gbar">
-        <label>Show <select id="ig-scope"><option value="well">this wellbore</option><option value="all">all wells with reports</option></select></label>
-        <label>Layout <select id="ig-layout"><option value="force">Force-directed</option><option value="rings">Rings</option><option value="tree">Tree</option><option value="radial">Radial tree</option><option value="circle">Circle</option><option value="grid">Grid</option></select></label>
-        <label>Node size <select id="ig-size"><option value="type">by type</option><option value="links">by number of links</option></select></label>
-        <input type="search" id="ig-find" placeholder="Find a node…" aria-label="Find a node by name">
-        <button id="ig-arrange" title="Run the layout again from where the nodes are now">Re-arrange</button>
+        <button id="ig-browse">Choose wellbore</button>
+        <label>Formation detail <select id="ig-formations"><option value="groups">Groups</option><option value="all">All formation nodes</option></select></label>
+        <label>Drilling events <select id="ig-events"><option value="">Hidden</option></select></label>
+          <input type="search" id="ig-find" placeholder="Find a node…" aria-label="Find a node by name">
         <button id="ig-fit" title="Zoom to show everything">Fit</button>
-        <button id="ig-all" title="Bring back nodes hidden by 'Keep only its neighbours'">Show all</button>
+        <button id="ig-all">Reset focus</button>
         <button id="ig-png" title="Save the picture as a PNG file">Save PNG</button>
       </div>
       <div class="gbar toggles small" id="ig-kinds"></div>
-      <div id="ig-box" class="graphbox cybox" role="img" aria-label="Knowledge graph of wellbores, hole sections, formations and events"></div>
-      <div id="ig-detail"></div>
+      <div class="graph-workspace"><div id="ig-box" class="graphbox cybox" role="region" aria-label="Connections for the selected wellbore"></div>
+        <aside id="ig-detail" class="graph-details"></aside></div>
       <p class="small muted" id="instancenote"></p>
     </div>
     <div class="view" id="view-model">
-      <h3>The model: what kinds of things, and how they connect</h3>
+      <h3>Wellgraph data model</h3>
+      <p class="small muted">Select an entity to inspect its data, definitions and relationships.</p>
       <div class="gbar">
-        
-        <label>Layout <select id="mg-layout"><option value="force">Force-directed</option><option value="rings">Rings</option><option value="tree">Tree</option><option value="radial">Radial tree</option><option value="circle">Circle</option><option value="grid">Grid</option></select></label>
-        <label>Node size <select id="mg-size"><option value="type">by type</option><option value="links">by number of links</option></select></label>
         <input type="search" id="mg-find" placeholder="Find a node…" aria-label="Find a node by name">
-        <button id="mg-arrange" title="Run the layout again from where the nodes are now">Re-arrange</button>
         <button id="mg-fit" title="Zoom to show everything">Fit</button>
-        <button id="mg-all" title="Bring back nodes hidden by 'Keep only its neighbours'">Show all</button>
+        <button id="mg-all">Clear selection</button>
         <button id="mg-png" title="Save the picture as a PNG file">Save PNG</button>
       </div>
       <div class="gbar toggles small">
         <label><input type="checkbox" id="ring-core" checked disabled><i class="dot" style="background:var(--accent)"></i>in the graph</label>
-        <label><input type="checkbox" id="ring-observed" checked><i class="dot" style="background:#c98a2b"></i>in the reports, not extracted yet</label>
-        <label><input type="checkbox" id="ring-planned"><i class="dot" style="background:#8b78c9"></i>planned (seismic, geology model)</label>
-        <label><input type="checkbox" id="mg-names" checked>relationship names</label>
+        <label><input type="checkbox" id="ring-observed"><i class="dot" style="background:#997334"></i>In reports, awaiting extraction</label>
+        <label><input type="checkbox" id="ring-planned"><i class="dot" style="background:#7c6aa3"></i>Planned</label>
+        <label><input type="checkbox" id="mg-names">Relationship labels</label>
       </div>
-      <div id="mg-box" class="graphbox cybox" role="img" aria-label="Entity types and relationships of the knowledge graph"></div>
-      <div id="modeldetail"></div>
+      <div class="graph-workspace"><div id="mg-box" class="graphbox cybox" role="region" aria-label="Entity types and relationships of the knowledge graph"></div>
+        <aside id="modeldetail" class="graph-details"></aside></div>
       <p class="small muted" id="modelnote"></p>
     </div>
     <div class="view" id="view-documents"><h3>Loaded source reports</h3><div id="well-documents"></div></div>
@@ -314,6 +421,8 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/core-overview.js"></script>
+<script src="/static/well-clusters.js"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -324,7 +433,6 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const label = t => t.replaceAll("_", " ");
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 const api = async (path, params = {}) => {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ""));
   const r = await fetch(`${path}?${q}`), body = await r.json();
@@ -348,12 +456,12 @@ function depthText(e) {
 
 const SECTIONS = {
   wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
-  drilling: {title: "Drilling events", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
+  drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
     views: [["matrix", "Across the shelf"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
-  reservoir: {title: "Reservoir quality", description: "Explore RealPore core measurements by formation and rock type.",
-    views: [["poroperm", "Core measurements"]]},
+  reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
+    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-clusters"]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
-    views: [["graph", "Data graph"], ["model", "Data model"]]}
+    views: [["model", "Model graph"], ["graph", "Data graph", true]]}
 };
 const DIRECTORY_FILTERS = ["quadrant", "field", "operator", "type", "data"];
 const DIRECTORY_PAGE_SIZE = 12;
@@ -406,7 +514,7 @@ function navigate(section, requestedView) {
   }
   if (needsWell && (!state.detail || state.loading)) return;
   const loaders = {matrix: loadMatrix, nearby: loadOffsets, timedepth: loadTimeDepth,
-    poroperm: initPoroPerm, graph: loadInstanceGraph, model: loadModel};
+    "core-overview": initCoreOverview, poroperm: initPoroPerm, "well-clusters": initWellClusters, graph: loadInstanceGraph, model: loadModel};
   if (loaders[view]) loaders[view]().catch(err => { if (state.view === view) showError(err); });
 }
 
@@ -421,12 +529,17 @@ function renderOverview(graph, ontology) {
     ["RealPore · GeoProvider", core ?? 0, "loaded core measurements", "Porosity, permeability and lithology", "https://zenodo.org/records/4723018", "Core dataset · CC BY 4.0"],
   ];
   $("sources").innerHTML = sources.map(([source, count, unit, detail, url, link]) =>
-    `<article class="panel source-card"><h3>${source}</h3><strong>${number(count)}</strong><span>${unit}</span><span>${detail}</span><a href="${url}">${link}</a></article>`).join("");
+    `<article class="panel source-card"><h3>${source}</h3><p><strong>${number(count)}</strong><span>${unit}</span></p><span>${detail}</span><a href="${url}">${link}</a></article>`).join("");
+  $("coverage-total").innerHTML = `<strong>${number(coverage.wellbores_with_documents)} of ${number(c.wellbore)}</strong><span class="small muted">wellbores in this snapshot have at least one loaded report</span>`;
   const byQuadrant = new Map();
-  for (const well of state.reportWells) byQuadrant.set(quadrant(well), (byQuadrant.get(quadrant(well)) || 0) + 1);
-  const ranked = [...byQuadrant].sort((a, b) => b[1] - a[1]).slice(0, 10);
-  $("coverage-chart").innerHTML = ranked.map(([name, count]) =>
-    `<li><div class="bar-label"><span>Quadrant ${esc(name)}</span><strong>${number(count)}</strong></div><div class="bar-track" aria-hidden="true"><i style="width:${count / ranked[0][1] * 100}%"></i></div></li>`).join("")
+  for (const well of state.reportWells) {
+    const key = quadrant(well);
+    if (!byQuadrant.has(key)) byQuadrant.set(key, []);
+    byQuadrant.get(key).push(well);
+  }
+  const ranked = [...byQuadrant].sort((a, b) => b[1].length - a[1].length).slice(0, 10);
+  $("coverage-chart").innerHTML = ranked.map(([name, wells]) =>
+    `<li><button data-quadrant="${esc(name)}" aria-pressed="false" ${wells.some(hasLocation) ? "" : "disabled"}><span class="bar-label"><span>Grid ${esc(name)}</span><strong>${number(wells.length)}</strong></span><span class="bar-track" aria-hidden="true" style="display:block"><i style="width:${wells.length / ranked[0][1].length * 100}%"></i></span></button></li>`).join("")
     || "<li>No reports loaded.</li>";
   const mapped = state.reportWells.filter(hasLocation).length;
   $("overview-mapnote").textContent = `${number(mapped)} report-bearing wellbores with surface coordinates. Select a marker to open a wellbore.`;
@@ -456,6 +569,7 @@ function renderDirectory() {
     && (!available || (available === "events" && w.events > 0) || (available === "core" && w.has_core)
       || (available === "no-events" && w.events === 0)));
   const start = state.directoryPage * DIRECTORY_PAGE_SIZE;
+  if (query) matches.sort((a, b) => Number(wellKey(b.name) === query) - Number(wellKey(a.name) === query));
   const shown = matches.slice(start, start + DIRECTORY_PAGE_SIZE);
   $("well-results").innerHTML = shown.map(w => `<button data-well="${esc(w.name)}" aria-current="${state.well === w.name}">
     <strong>${esc(w.name)}</strong><span class="small muted">${[w.field, w.operator, w.wellbore_type].filter(Boolean).map(esc).join(" · ")}</span>
@@ -471,9 +585,10 @@ async function init() {
   $("browse-wellbores").onclick = () => { navigate("wellbore"); $("well-search").focus(); };
   $("open-well-events").onclick = () => navigate("drilling", "table");
   $("open-well-offsets").onclick = () => navigate("drilling", "nearby");
+  $("open-well-graph").onclick = () => navigate("knowledge", "graph");
   $("open-well-core").onclick = () => {
     state.preferWellFormation = true;
-    navigate("reservoir");
+    navigate("reservoir", "poroperm");
   };
   $("radius").onchange = e => { state.radius = +e.target.value; loadOffsets().catch(showError); };
   $("profile-range").onsubmit = e => {
@@ -545,7 +660,9 @@ function renderFacts() {
   $("well-title").textContent = w.name;
   const rows = [["Operator", w.operator], ["Type", [w.wellbore_type, w.purpose].filter(Boolean).join(" · ")],
     ["Field", w.field], ["Total depth", w.total_depth_md ? `${fmt(w.total_depth_md)} m MD` : null],
-    ["Water depth", w.water_depth ? `${fmt(w.water_depth)} m` : null], ["Core plugs", state.core.length || null]];
+    ["Water depth", w.water_depth ? `${fmt(w.water_depth)} m` : null], ["Core plugs", number(state.core.length)],
+    ["Loaded reports", number(state.detail.documents.length)],
+    ["Extracted events", number(Object.values(state.detail.event_counts).reduce((sum, count) => sum + count, 0))]];
   $("facts").innerHTML = rows.filter(([, value]) => value).map(([label, value]) =>
     `<dt>${label}</dt><dd>${esc(value)}</dd>`).join("");
 }
@@ -637,9 +754,24 @@ function setDepthWindow(range) {
   renderStrip();
 }
 
+function renderProfileWindow(from, to, core) {
+  const limit = state.profileLimit, x = md => 44 + 500 * md / limit;
+  const td = state.detail.wellbore.total_depth_md;
+  const inView = core.filter(c => c.depth_md >= from && c.depth_md <= to).length;
+  const plottedDepths = [...new Set(core.map(c => c.depth_md))];
+  $("profile-window").innerHTML = `<svg viewBox="0 0 600 34" aria-hidden="true">
+    <rect x="44" y="8" width="500" height="11" rx="3" fill="var(--strata-b)"/>
+    <rect x="${x(from)}" y="8" width="${x(to) - x(from)}" height="11" rx="2" fill="var(--strata-a)" stroke="var(--field)"/>
+    ${plottedDepths.map(md => `<line x1="${x(md)}" x2="${x(md)}" y1="10" y2="17" stroke="var(--signal)" stroke-opacity=".45"/>`).join("")}
+    ${Number.isFinite(td) && td > 0 ? `<line x1="${x(td)}" x2="${x(td)}" y1="5" y2="21" stroke="var(--ink)"/>` : ""}
+    <text x="44" y="32" class="dim">0 m</text><text x="544" y="32" class="dim" text-anchor="end">${number(limit)} m MD</text>
+    </svg><span class="small muted">${number(inView)} of ${number(core.length)} depth-located core plugs in this window</span>`;
+}
+
 function renderStrip() {
   const d = state.detail, H = 900, top = 62, bottom = 27;
   const shown = visibleEvents().filter(usesMd);
+  const core = state.core.filter(c => Number.isFinite(c.depth_md) && c.depth_md >= 0);
   const profileDepth = Math.max(d.wellbore.total_depth_md || 0,
     ...d.formation_tops.map(f => f.base_md || f.top_md || 0),
     ...d.hole_sections.map(h => h.base_md || h.casing_depth_md || 0),
@@ -652,11 +784,12 @@ function renderStrip() {
   const step = state.profileWindow ? ([1, 2, 5, 10].find(value => value * radix >= span / 8) || 10) * radix : fullStep;
   const y = m => top + (H - top - bottom) * (m - from) / span;
   const inWindow = m => m >= from && m <= to;
+  renderProfileWindow(from, to, core);
   $("profile-from").value = from;
   $("profile-to").value = to;
   $("profile-to").max = state.profileLimit;
   $("profile-full").disabled = !state.profileWindow;
-  $("profile-core").disabled = !state.core.some(c => Number.isFinite(c.depth_md) && c.depth_md >= 0);
+  $("profile-core").disabled = core.length === 0;
   $("profile-status").textContent = state.profileWindow ? `Showing ${number(from)}–${number(to)} m MD` : "";
   const tracks = [
     [57, 181, "Strat. group"], [181, 334, "Formation tops"], [334, 434, "Hole / casing"],
@@ -694,7 +827,8 @@ function renderStrip() {
     const yy = y(f.top_md);
     s += `<line x1="181" x2="334" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-opacity=".55"><title>${esc(f.formation)} · ${fmt(f.top_md)} m MD</title></line>`;
     if (yy - lastTop >= 13) {
-      s += `<text x="187" y="${yy + 11}">${esc(f.formation)}</text>`;
+      const text = f.formation.length > 22 ? f.formation.slice(0, 20) + "…" : f.formation;
+      s += `<text x="187" y="${yy + 11}">${esc(text)}<title>${esc(f.formation)} · ${number(f.top_md)} m MD</title></text>`;
       lastTop = yy;
     }
   }
@@ -737,10 +871,15 @@ function renderStrip() {
     s += `<path d="M${cx} ${cy - 4} l4 4 -4 4 -4 -4 Z" fill="var(--panel)" stroke="var(--ink)"><title>Leak-off value · ${fmt(h.lot_mud_density_sg, 2)} sg · ${fmt(h.casing_depth_md)} m MD</title></path>`;
   }
   const lanes = Object.keys(TYPES).filter(type => shown.some(e => e.event_type === type));
+  const laneX = type => 575 + (lanes.length === 1 ? 40 : lanes.indexOf(type) / (lanes.length - 1) * 80);
+  for (const type of lanes) {
+    const x = laneX(type);
+    s += `<line x1="${x}" x2="${x}" y1="${top}" y2="${H - bottom}" stroke="${TYPES[type]}" stroke-opacity=".16"><title>${esc(label(type))}</title></line>`;
+  }
   for (const e of shown) {
     const depth = eventDepth(e);
     if (depth == null) continue;
-    const x = 575 + (lanes.length === 1 ? 40 : lanes.indexOf(e.event_type) / (lanes.length - 1) * 80);
+    const x = laneX(e.event_type);
     const yy = y(depth), c = TYPES[e.event_type], selected = state.selected === e.event_id;
     const title = `${label(e.event_type)} · ${depthText(e)} ${depthReference(e)}`;
     const base = e.base_md ?? e.context_base_md;
@@ -749,7 +888,6 @@ function renderStrip() {
     if (e.mud_weight_sg > 0 && e.mud_weight_kind === "mud_in_hole" && e.mud_weight_source === "report" && e.depth_basis === "stated")
       s += `<rect x="${mudX(e.mud_weight_sg) - 2.5}" y="${yy - 2.5}" width="5" height="5" fill="var(--highlight)"><title>Report-stated static mud · ${fmt(e.mud_weight_sg, 2)} sg</title></rect>`;
   }
-  const core = state.core.filter(c => c.depth_md != null && c.depth_md >= 0);
   const phiMax = Math.max(20, Math.ceil(Math.max(0, ...core.map(c => c.porosity_pct || 0)) / 10) * 10);
   const logValues = core.filter(c => c.kh_md > 0).map(c => Math.log10(c.kh_md));
   const logMin = Math.min(-2, Math.floor(Math.min(...logValues)));
@@ -765,9 +903,17 @@ function renderStrip() {
     if (c.kh_md > 0) s += `<circle cx="${permX(Math.log10(c.kh_md))}" cy="${yy}" r="2" fill="var(--highlight)" fill-opacity=".65"><title>${description} · kₕ ${khLabel(c.kh_md)} mD${c.kh_method ? " · " + esc(c.kh_method) : ""}</title></circle>`;
   }
   if (!core.length) s += '<text x="789" y="91" text-anchor="middle" class="dim">No core measurements loaded</text>';
-  $("strip").innerHTML = s + '</g>';
+  const td = d.wellbore.total_depth_md;
+  s += '</g>';
+  if (Number.isFinite(td) && td > 0 && inWindow(td)) {
+    s += `<line x1="57" x2="911" y1="${y(td)}" y2="${y(td)}" stroke="var(--field)" stroke-dasharray="5 3"/>
+      <text x="905" y="${y(td) - 5}" text-anchor="end">TD ${number(td)} m MD</text>`;
+  }
+  $("strip").innerHTML = s;
   for (const el of $("strip").querySelectorAll("[data-id]")) el.onclick = () => select(el.dataset.id);
   $("stratlegend").innerHTML = '<span><i class="sw" style="background:var(--strata-a)"></i>SODIR stratigraphy</span><span>◂ ▸ Casing shoe</span><span>◇ Leak-off value</span><span>▪ Reported static mud</span><span>● Report-stated event</span><span>○ Contextual point</span><span>┆ Contextual interval</span>';
+  $("stratlegend").innerHTML += lanes.length ? '<span>Event lanes</span>' + lanes.map(type =>
+    `<span><i class="dot" style="background:${TYPES[type]}"></i>${esc(label(type))}</span>`).join("") : "";
 }
 
 // ---- core measurements ------------------------------------------------------------
@@ -832,25 +978,56 @@ async function loadPoroPerm(resetLithology = false) {
   const local = state.detail ? state.core.filter(s =>
     s.formation === d.formation && paired(s) && (lithology === "all" || s.lithology === lithology)
     && (!khMethod || (s.kh_method || "unrecorded") === khMethod)) : [];
+  local.sort((a, b) => (a.depth_md ?? Infinity) - (b.depth_md ?? Infinity));
+  const reference = local.length ? d.points.filter(s => s.wellbore !== state.well) : d.points;
   $("pptitle").textContent = d.formation + " core measurements";
-  const metrics = [[number(d.pairs), "Paired plugs"], [number(d.wellbores), "Wellbores"],
+  const metrics = [[number(d.pairs), "Paired plugs in full selection"], [number(d.wellbores), "Wellbores in full selection"],
     [d.porosity_p50 == null ? "–" : fmt(d.porosity_p50, 1) + " %", "Median porosity"],
     [d.kh_p50_md == null ? "–" : khLabel(d.kh_p50_md) + " mD", "Median horizontal permeability"]];
   $("ppstats").innerHTML = metrics.map(([v, title]) => `<div><strong>${v}</strong><span>${title}</span></div>`).join("");
   const methodTotal = d.methods.reduce((total, method) => total + method.pairs, 0);
   $("ppmethods").innerHTML = methodTotal ? '<span>Methods in this formation and rock type</span>' + d.methods.map(m =>
-    `<span>${esc(methodLabel(m.method))} <strong>${pct(m.pairs, methodTotal)}</strong></span>`).join("") : "";
+    `<span>${esc(methodLabel(m.method))} <strong>${m.pairs * 100 < methodTotal ? "&lt;1%" : pct(m.pairs, methodTotal)}</strong></span>`).join("") : "";
   const fit = $("ppfit").checked && d.fit &&
     [d.fit.slope, d.fit.intercept, d.fit.porosity_p10, d.fit.porosity_p90].every(Number.isFinite) ? d.fit : null;
-  renderCoreCharts(d.points, local, fit);
-  $("pplegend").innerHTML = '<span><i class="dot" style="background:var(--reference)"></i>Formation sample</span>' +
-    (local.length ? `<span><i class="dot" style="background:var(--highlight)"></i>${esc(state.well)} · ${number(local.length)} paired plugs</span>` : "") +
+  renderCoreCharts(reference, local, fit);
+  renderPlugInspector(local);
+  $("pplegend").innerHTML = (reference.length ?
+    `<span><i class="dot" style="background:var(--reference)"></i>${local.length ? "Other wellbores" : "Formation sample"} · ${number(reference.length)} plotted plugs</span>` : "") +
+    (local.length ? `<span><i class="dot" style="background:var(--highlight)"></i>${esc(state.well)} · ${number(local.length)} plotted plugs</span>` : "") +
     (fit ? '<span><i class="sw" style="background:var(--fit)"></i>Formation fit</span>' : "");
-  const shown = `${number(d.points.length)} of ${number(d.pairs)} formation pairs plotted. Histograms use the plotted samples. Medians use the full filtered cohort.`;
+  const shown = `Medians use all ${number(d.pairs)} pairs in the filtered selection. Plot and distributions use the same ${number(reference.length + local.length)} shown plugs.`;
   const fitText = khMethod ? " The stored fit pools methods and is hidden for this selection."
     : fit ? ` Fit includes ${number(fit.samples)} paired plugs across ${number(fit.wellbores)} wellbores (R² ${fmt(fit.r2, 2)}). Measurements may use different laboratory methods.`
     : d.fit && !$("ppfit").checked ? " Formation fit hidden." : " No formation fit is available for this selection.";
   $("ppnote").textContent = shown + fitText;
+}
+
+function renderPlugInspector(local) {
+  const inspector = $("pp-inspector"), picker = $("pp-plug"), depthButton = $("pp-open-depth");
+  inspector.hidden = !local.length;
+  picker.innerHTML = '<option value="">Inspect a plug from this wellbore</option>' + local.map((plug, index) =>
+    `<option value="${index}">${plug.depth_md == null ? "MD unavailable" : `${number(plug.depth_md)} m MD`} · ${fmt(plug.porosity_pct, 1)}% · ${khLabel(plug.kh_md)} mD</option>`).join("");
+  const markers = $("ppplot").querySelectorAll("[data-plug]");
+  const inspect = value => {
+    const plug = value === "" ? null : local[Number(value)];
+    picker.value = value;
+    for (const marker of markers) marker.setAttribute("aria-pressed", value === marker.dataset.plug);
+    $("pp-plug-id").textContent = plug
+      ? [plug.lithology, methodLabel(plug.kh_method || "unrecorded")].filter(Boolean).join(" · ")
+      : "";
+    depthButton.disabled = !plug || !Number.isFinite(plug.depth_md) || plug.depth_md < 0;
+    depthButton.dataset.md = depthButton.disabled ? "" : plug.depth_md;
+  };
+  picker.onchange = () => inspect(picker.value);
+  for (const marker of markers) marker.addEventListener("click", () => inspect(marker.dataset.plug));
+  depthButton.onclick = () => {
+    const md = Number(depthButton.dataset.md);
+    setDepthWindow([Math.max(0, Math.floor(md - 25)), Math.min(state.profileLimit, Math.ceil(md + 25))]);
+    navigate("wellbore", "strip");
+    $("profile-range").scrollIntoView({block: "nearest"});
+  };
+  inspect("");
 }
 
 function renderCoreCharts(reference, local, fit) {
@@ -868,18 +1045,19 @@ function renderCoreCharts(reference, local, fit) {
   const every = Math.max(1, Math.ceil((high - low) / 8));
   for (let decade = low; decade <= high; decade += every) plot +=
     `<line x1="64" x2="694" y1="${y(decade)}" y2="${y(decade)}" stroke="var(--line)"/><text x="56" y="${y(decade) + 4}" text-anchor="end" class="dim">${khLabel(10 ** decade)}</text>`;
-  for (let phi = 0; phi <= maxPhi; phi += Math.max(5, maxPhi / 6)) plot +=
+  const phiStep = maxPhi >= 40 ? 10 : 5;
+  for (let phi = 0; phi <= maxPhi; phi += phiStep) plot +=
     `<line x1="${x(phi)}" x2="${x(phi)}" y1="20" y2="396" stroke="var(--line)"/><text x="${x(phi)}" y="414" text-anchor="middle" class="dim">${fmt(phi)}</text>`;
   plot += '<text x="379" y="440" text-anchor="middle">Core porosity (%)</text><text x="13" y="208" transform="rotate(-90 13 208)" text-anchor="middle">Horizontal permeability (mD, log scale)</text>';
-  const dots = (samples, color, opacity, radius) => samples.map(s =>
-    `<circle cx="${x(s.porosity_pct)}" cy="${y(Math.log10(s.kh_md))}" r="${radius}" fill="${color}" fill-opacity="${opacity}"><title>${esc(s.wellbore || state.well)} · ${fmt(s.depth_md, 1)} m MD · ${fmt(s.porosity_pct, 1)}% · ${khLabel(s.kh_md)} mD${s.kh_method ? " · " + esc(s.kh_method) : ""}</title></circle>`).join("");
-  plot += dots(local.length ? reference.filter(s => s.wellbore !== state.well) : reference, "var(--reference)", ".38", 2.4);
+  const dots = (samples, color, opacity, radius, inspectable = false) => samples.map((s, i) =>
+    `<circle cx="${x(s.porosity_pct)}" cy="${y(Math.log10(s.kh_md))}" r="${radius}" fill="${color}" fill-opacity="${opacity}" ${inspectable ? `data-plug="${i}"` : ""}><title>${esc(s.wellbore || state.well)} · ${fmt(s.depth_md, 1)} m MD · ${fmt(s.porosity_pct, 1)}% · ${khLabel(s.kh_md)} mD${s.kh_method ? " · " + esc(methodLabel(s.kh_method)) : ""}</title></circle>`).join("");
+  plot += dots(reference, "var(--reference)", ".55", 2.6);
   if (fit) {
     const a = Math.max(0, fit.porosity_p10), b = Math.min(maxPhi, fit.porosity_p90);
     const log = phi => fit.intercept + fit.slope * phi;
     plot += `<svg x="64" y="20" width="630" height="376" overflow="hidden"><line x1="${x(a) - 64}" x2="${x(b) - 64}" y1="${y(log(a)) - 20}" y2="${y(log(b)) - 20}" stroke="var(--fit)" stroke-width="2" stroke-dasharray="5 3"/></svg>`;
   }
-  plot += dots(local, "var(--highlight)", ".72", 3.2);
+  plot += dots(local, "var(--highlight)", ".72", 3.2, true);
   $("ppplot").innerHTML = plot;
   $("pphist").innerHTML = histogram("Porosity (%)", 20, reference, local, s => s.porosity_pct, 0, maxPhi, v => fmt(v)) +
     histogram("Horizontal permeability (mD, log scale)", 202, reference, local, s => Math.log10(s.kh_md), low, high, v => khLabel(10 ** v));
@@ -901,7 +1079,7 @@ function histogram(title, top, reference, local, value, min, max, format) {
   }).join("");
   return `<text x="${left}" y="${top + 8}">${title}</text>
     <rect x="${left}" y="${base - height}" width="${width}" height="${height}" fill="var(--panel)" stroke="var(--line)"/>
-    <text x="${left - 5}" y="${base - height + 4}" text-anchor="end" class="dim">${fmt(peak * 100)}%</text>
+    ${[0, .5, 1].map(f => `<line x1="${left}" x2="${left + width}" y1="${base - f * height}" y2="${base - f * height}" stroke="var(--line)"/><text x="${left - 5}" y="${base - f * height + 4}" text-anchor="end" class="dim">${fmt(f * peak * 100)}%</text>`).join("")}
     ${bars(all, "var(--reference)", binWidth - 2, 1)}${local.length ? bars(selected, "var(--highlight)", binWidth / 2, binWidth / 4) : ""}
     <text x="${left}" y="${base + 17}" class="dim">${format(min)}</text><text x="${left + width}" y="${base + 17}" text-anchor="end" class="dim">${format(max)}</text>`;
 }
@@ -950,135 +1128,230 @@ const graphStyle = () => [
   {selector: "edge", style: {width: 1, "line-color": css("--muted"), opacity: .5, "curve-style": "bezier", "target-arrow-shape": "triangle",
     "target-arrow-color": css("--muted"), "arrow-scale": .6}},
   {selector: "edge[?dashed]", style: {"line-style": "dashed"}},
+  {selector: "node.model-card", style: {shape: "round-rectangle", width: 142, height: 48,
+    "background-color": css("--panel"), "border-color": "data(color)", "border-width": 2,
+    "text-valign": "center", "text-halign": "center", "text-margin-y": 0, "text-outline-width": 0,
+    "font-size": 13, "font-weight": 600, "text-max-width": 126}},
+  {selector: "node.instance-card", style: {shape: "round-rectangle", width: 118, height: 38,
+    "background-color": css("--panel"), "border-color": "data(color)", "border-width": 2,
+    "text-valign": "center", "text-halign": "center", "text-margin-y": 0, "text-outline-width": 0,
+    "font-size": 12, "font-weight": 600, "text-max-width": 104}},
+  {selector: "node.instance-card[?big]", style: {width: 142, height: 48, "background-color": "#dceff2"}},
+  {selector: "edge.model-edge", style: {width: 1.25, opacity: .48, "curve-style": "bezier"}},
   {selector: "edge.named", style: {label: "data(relation)", "font-size": 8, color: css("--muted"), "text-rotation": "autorotate",
     "text-background-color": css("--soft"), "text-background-opacity": .9, "text-background-padding": 1}},
   {selector: "node.nolabel", style: {label: ""}},
   {selector: ".off, .out", style: {display: "none"}},
   {selector: ".faded", style: {opacity: .08, "text-opacity": 0}},
   {selector: "edge.lit", style: {opacity: .95, width: 2, "line-color": css("--accent"), "target-arrow-color": css("--accent")}},
+  {selector: "node.model-card.picked", style: {"background-color": "#dceff2"}},
   {selector: "node.picked", style: {"border-width": 3, "border-color": css("--accent")}},
   {selector: "node.found", style: {"border-width": 4, "border-color": "#e0245e"}},
 ];
-function layoutOptions(name, eles, roots, fresh) {
-  const base = {fit: true, padding: 30, animate: true, animationDuration: 350}, top = roots ? eles.nodes(roots) : null, big = eles.nodes().length > 250;
-  const tree = {...base, name: "breadthfirst", roots: top && top.length ? top : undefined, directed: false, spacingFactor: big ? .7 : 1.1, avoidOverlap: true};
-  return {
-    force: {...base, name: "cose", animate: false, randomize: fresh, nodeRepulsion: n => n.data("repel") || 9000, idealEdgeLength: e => e.data("len") || 80,
-            edgeElasticity: () => 90, gravity: .35, numIter: big ? 700 : 1500, nodeOverlap: 14, componentSpacing: 70},
-    rings: {...base, name: "concentric", concentric: n => n.data("level"), levelWidth: () => 1, minNodeSpacing: big ? 4 : 16, avoidOverlap: true},
-    tree, radial: {...tree, circle: true},
-    circle: {...base, name: "circle", sort: (a, b) => b.data("level") - a.data("level") || String(a.data("full")).localeCompare(String(b.data("full")))},
-    grid: {...base, name: "grid", sort: (a, b) => b.data("level") - a.data("level") || String(a.data("full")).localeCompare(String(b.data("full")))},
-  }[name];
-}
-function makeGraph(p, {onPick, roots}) {
-  const box = $(p + "-box"), cy = cytoscape({container: box, style: graphStyle(), minZoom: .08, maxZoom: 5});
-  const v = {cy, dirty: true, locked: null}, pref = store.get("wg-" + p + "-layout");
-  if (pref && [...$(p + "-layout").options].some(o => o.value === pref)) $(p + "-layout").value = pref;
-  v.layout = fresh => { if (!box.offsetWidth) { v.dirty = true; return; } v.dirty = false; cy.resize();
-    const shown = cy.elements(":visible"); if (shown.length) shown.layout(layoutOptions($(p + "-layout").value, shown, roots, fresh)).run(); };
-  v.sizes = () => { const links = $(p + "-size").value === "links";
-    cy.batch(() => cy.nodes().forEach(n => n.data("size", links ? 9 + 5 * Math.sqrt(n.degree(false)) : n.data("base")))); };
-  v.set = elements => { cy.batch(() => { cy.elements().remove(); cy.add(elements); }); v.locked = null; v.sizes(); onPick(null); v.layout(true); };
+function makeGraph(p, {onPick}) {
+  const box = $(p + "-box"), cy = cytoscape({container: box, style: graphStyle(), minZoom: .08, maxZoom: 4});
+  const v = {cy, dirty: true, locked: null};
+  v.layout = () => {
+    if (!box.offsetWidth) { v.dirty = true; return; }
+    v.dirty = false;
+    cy.resize();
+    const shown = cy.elements(":visible");
+    if (!shown.length) return;
+    shown.layout({name: "preset", positions: n => n.data("position"), fit: true, padding: 22, animate: false}).run();
+  };
   v.light = n => cy.batch(() => { cy.elements().removeClass("faded lit picked"); if (!n) return;
     cy.elements().not(n.closedNeighborhood()).addClass("faded"); n.connectedEdges().addClass("lit"); n.addClass("picked"); });
   v.pick = n => { v.locked = n; v.light(n); onPick(n); };
-  v.keep = n => { cy.batch(() => { cy.elements().addClass("out"); n.closedNeighborhood().closedNeighborhood().removeClass("out"); }); v.layout(false); };
+  v.keep = n => { cy.batch(() => { cy.elements().addClass("out"); n.closedNeighborhood().removeClass("out"); }); v.layout(); };
   cy.on("mouseover", "node", e => { if (!v.locked) v.light(e.target); });
   cy.on("mouseout", "node", () => { if (!v.locked) v.light(null); });
   cy.on("tap", e => { if (e.target === cy) v.pick(null); });
   cy.on("tap", "node", e => v.pick(e.target));
-  $(p + "-layout").onchange = e => { store.set("wg-" + p + "-layout", e.target.value); v.layout(true); };
-  $(p + "-size").onchange = v.sizes;
-  $(p + "-arrange").onclick = () => v.layout(false);
   $(p + "-fit").onclick = () => cy.animate({fit: {eles: cy.elements(":visible"), padding: 30}}, {duration: 300});
   $(p + "-all").onclick = () => { cy.elements().removeClass("out"); v.pick(null); v.layout(false); };
   $(p + "-png").onclick = () => { const a = document.createElement("a"); a.href = cy.png({full: true, scale: 2, bg: css("--soft")}); a.download = p === "ig" ? "wellgraph-graph.png" : "wellgraph-model.png"; a.click(); };
   $(p + "-find").oninput = e => { const q = e.target.value.trim().toLowerCase();
     cy.batch(() => { cy.nodes().removeClass("found"); if (q) cy.nodes().filter(n => String(n.data("full") || "").toLowerCase().includes(q)).addClass("found"); }); };
-  $(p + "-find").onkeydown = e => { const hit = cy.nodes(".found:visible"); if (e.key === "Enter" && hit.length) cy.animate({fit: {eles: hit, padding: 90}}, {duration: 300}); };
+  $(p + "-find").onkeydown = e => {
+    const hit = cy.nodes(".found:visible");
+    if (e.key !== "Enter" || !hit.length) return;
+    v.pick(hit[0]);
+    cy.animate({fit: {eles: hit, padding: 90}}, {duration: 300});
+  };
   new ResizeObserver(() => { if (!box.offsetWidth) return; cy.resize(); if (v.dirty) v.layout(true); }).observe(box);
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cy.style(graphStyle()));
   return v;
 }
 
 // ---- knowledge graph: the model -----------------------------------------------------
-const RING = {core: {fill: "--accent", level: 3, text: "in the graph"}, observed: {fill: "#c98a2b", level: 2, text: "in the reports, not extracted"}, planned: {fill: "#8b78c9", level: 1, text: "planned"}};
-let ontology = null, mg = null;
+const RING = {
+  core: {colour: "#087b8d", text: "In the graph"},
+  observed: {colour: "#997334", text: "In reports"},
+  planned: {colour: "#7c6aa3", text: "Planned"}
+};
+const MODEL_LAYOUT = {
+  Well: [70, 24], Wellbore: [266, 24], Document: [480, 24], Page: [672, 24],
+  HoleSection: [70, 118], DrillingEvent: [480, 118],
+  MudCheck: [70, 221], GeologicalFormation: [266, 221], DailyOperationsReport: [672, 221],
+  CoreSample: [266, 334], PoroPermRelationship: [480, 334]
+};
+const entityLabel = name => name.replace(/([a-z])([A-Z])/g, "$1 $2");
+let ontology, mg;
+function modelDetail(node) {
+  const panel = $("modeldetail");
+  if (!node) {
+    panel.innerHTML = '<h3>Entity details</h3><p class="small muted">Select a card to review its source and connected entities.</p>';
+    return;
+  }
+  const e = ontology.entities.find(entity => entity.name === node.id());
+  if (!e) return;
+  const related = ontology.relationships.filter(r => node.id() === r.from || node.id() === r.to);
+  panel.innerHTML = `<h3>${esc(entityLabel(e.name))}</h3><p class="small"><span class="tag">${RING[e.ring].text}</span>
+    ${e.rows == null ? "" : `${number(e.rows)} rows`}</p>
+    <p class="small">${esc(e.description)}</p>${e.osdu_kind ? `<p class="small muted">OSDU · ${esc(e.osdu_kind)}</p>` : ""}
+    <ul class="model-relations">${related.map(r => {
+      const outgoing = r.from === e.name, other = outgoing ? r.to : r.from;
+      return `<li><button data-entity="${esc(other)}"><small>${outgoing ? "→" : "←"} ${esc(r.name.replaceAll("_", " ").toLowerCase())} · ${RING[r.ring].text}</small>${esc(entityLabel(other))}</button></li>`;
+    }).join("")}</ul>`;
+  for (const button of panel.querySelectorAll("[data-entity]")) button.onclick = () => {
+    const target = mg.cy.getElementById(button.dataset.entity);
+    if (!target.length) return;
+    const ring = target.data("ring");
+    if (ring !== "core") {
+      $("ring-" + ring).checked = true;
+      $("ring-" + ring).onchange();
+    }
+    mg.pick(target);
+  };
+}
 async function loadModel() {
-  ontology = await api("/api/ontology");
-  mg = makeGraph("mg", {roots: "#Wellbore", onPick: n => { if (!n) { $("modeldetail").innerHTML = ""; return; }
-    const e = ontology.entities.find(x => x.name === n.id()), rels = ontology.relationships.filter(r => r.from === e.name || r.to === e.name);
-    $("modeldetail").innerHTML = `<div class="card"><h3>${esc(e.name)} <span class="tag">${RING[e.ring].text}</span></h3>
-      <p class="small" style="margin:4px 0">${esc(e.description)}</p>
-      <p class="small muted" style="margin:4px 0">OSDU kind: ${esc(e.osdu_kind)}${e.rows != null ? ` · ${e.rows.toLocaleString()} rows` : ""}${e.seen_in_pages ? ` · seen on ${e.seen_in_pages} report pages (of 1,208 sampled)` : ""}</p>
-      <p class="small" style="margin:4px 0">${rels.map(r => `${esc(r.from)} <b>${esc(r.name)}</b> ${esc(r.to)}`).join(" · ") || "No relationships defined."}</p>
-      <p style="margin:6px 0 2px"><button id="mg-keep">Keep only its neighbours</button></p></div>`;
-    $("mg-keep").onclick = () => mg.keep(n); }});
-  const ringOf = Object.fromEntries(ontology.entities.map(e => [e.name, e.ring]));
-  const fill = ring => RING[ring].fill.startsWith("--") ? css(RING[ring].fill) : RING[ring].fill;
-  const nodes = ontology.entities.map(e => ({data: {id: e.name, full: e.name, ring: e.ring, color: fill(e.ring), level: RING[e.ring].level, big: e.ring === "core", repel: 90000,
-    text: e.name + (e.rows != null ? "\n" + e.rows.toLocaleString() : ""), base: e.ring === "core" ? 18 + Math.log10((e.rows || 1) + 1) * 6 : 14}}));
-  const edges = ontology.relationships.map((r, i) => ({data: {id: "r" + i, source: r.from, target: r.to, relation: r.name, dashed: r.ring !== "core", len: 120,
-    rings: [ringOf[r.from], ringOf[r.to]]}, classes: "named"}));
-  const filter = () => { const on = {core: true, observed: $("ring-observed").checked, planned: $("ring-planned").checked};
-    mg.cy.batch(() => { mg.cy.nodes().forEach(n => n.toggleClass("off", !on[n.data("ring")])); mg.cy.edges().toggleClass("named", $("mg-names").checked); }); };
-  for (const ring of ["observed", "planned"]) $("ring-" + ring).onchange = () => { filter(); mg.layout(true); };
+  if (mg) return;
+  const spec = await api("/api/ontology");
+  if (mg || state.view !== "model") return;
+  ontology = spec;
+  mg = makeGraph("mg", {onPick: modelDetail});
+  const next = {core: 0, observed: 0, planned: 0};
+  const nodes = ontology.entities.map(e => {
+    const i = next[e.ring]++;
+    const [x, y] = MODEL_LAYOUT[e.name] || [70 + 180 * (i % 4), 445 + (e.ring === "planned" ? 400 : 0) + 65 * Math.floor(i / 4)];
+    return {classes: "model-card", data: {id: e.name, full: e.name, text: entityLabel(e.name),
+      ring: e.ring, color: RING[e.ring].colour, position: {x, y}}};
+  });
+  const edges = ontology.relationships.map((r, i) => ({classes: "model-edge", data: {
+    id: "r" + i, source: r.from, target: r.to, relation: r.name.replaceAll("_", " ").toLowerCase(), dashed: r.ring !== "core"}}));
+  const filter = () => {
+    const on = {core: true, observed: $("ring-observed").checked, planned: $("ring-planned").checked};
+    mg.cy.batch(() => {
+      mg.cy.nodes().forEach(n => n.toggleClass("off", !on[n.data("ring")]));
+      mg.cy.edges().toggleClass("named", $("mg-names").checked);
+    });
+    if (mg.locked?.hidden()) mg.pick(null);
+  };
+  for (const ring of ["observed", "planned"]) $("ring-" + ring).onchange = () => { filter(); mg.layout(); };
   $("mg-names").onchange = filter;
-  mg.cy.add([...nodes, ...edges]); filter(); mg.sizes(); mg.layout(true);
-  const n = ring => ontology.entities.filter(e => e.ring === ring).length;
-  $("modelnote").textContent = `${n("core")} entity types hold data (with row counts); ${n("observed")} more are present in the reports but not extracted; ${n("planned")} are planned with no data source. Solid lines are relationships stored in the graph, dashed ones are not stored yet. Drag any node to move it, scroll to zoom, drag the background to pan. Click an entity for its meaning, OSDU kind and relationships.`;
+  mg.cy.add([...nodes, ...edges]);
+  filter();
+  mg.layout();
+  modelDetail(mg.cy.getElementById("Wellbore"));
+  $("modelnote").textContent = `${next.core} core entities · ${next.observed} awaiting extraction · ${next.planned} planned. Dashed links represent relationships outside the current core model.`;
 }
 
-// ---- knowledge graph: one wellbore, or all wells with reports -----------------------
-const KIND = {Wellbore: {fill: "--ink", base: 30, level: 6, text: "wellbore"}, Organisation: {fill: "#7a8794", base: 18, level: 5, text: "operator"},
-  Field: {fill: "#4f9d5d", base: 18, level: 5, text: "field"}, Document: {fill: "#b9a13a", base: 16, level: 5, text: "report"},
-  HoleSection: {fill: "#56697a", base: 20, level: 4, text: "hole section"}, GeologicalFormation: {fill: "#c9ccd1", base: 18, level: 3, text: "group / formation"},
-  DrillingEvent: {fill: "#888", base: 11, level: 1, text: "event"}};
-let ig = null, igLoaded = null;
+// ---- knowledge graph: one wellbore --------------------------------------------------
+const KIND = {
+  Wellbore: {fill: "#23475e", size: 36, text: "wellbore"},
+  Organisation: {fill: "#627a90", size: 19, text: "operator"},
+  Field: {fill: "#518297", size: 19, text: "field"},
+  Document: {fill: "#997334", size: 18, text: "report"},
+  HoleSection: {fill: "#6e869a", size: 20, text: "hole section"},
+  GeologicalFormation: {fill: "#b6d0e0", size: 20, text: "stratigraphic unit"},
+  DrillingEvent: {fill: "#627a90", size: 13, text: "event"}
+};
+const GRAPH_EVENT_LIMIT = 24;
+let ig, igGraph;
 function initInstanceGraph() {
-  ig = makeGraph("ig", {roots: "[kind = 'Wellbore']", onPick: instanceDetail});
-  $("ig-kinds").innerHTML = Object.entries(KIND).filter(([k]) => k !== "Wellbore").map(([k, st]) =>
-    `<label><input type="checkbox" data-kind="${k}" checked><i class="dot" style="background:${k === "GeologicalFormation" ? stratColour() : k === "DrillingEvent" ? TYPES.tight_hole : st.fill}"></i>${st.text}s</label>`).join("") +
-    `<label><input type="checkbox" id="ig-evlabels">event labels</label>`;
-  const filter = relayout => { const on = Object.fromEntries([...$("ig-kinds").querySelectorAll("[data-kind]")].map(c => [c.dataset.kind, c.checked]));
-    ig.cy.batch(() => ig.cy.nodes().forEach(n => { n.toggleClass("off", on[n.data("kind")] === false);
-      n.toggleClass("nolabel", n.data("kind") === "DrillingEvent" && !$("ig-evlabels").checked); }));
-    if (relayout) ig.layout(false); };
-  ig.filter = filter;
-  for (const c of $("ig-kinds").querySelectorAll("[data-kind]")) c.onchange = () => filter(true);
-  $("ig-evlabels").onchange = () => filter(false);
-  if (store.get("wg-ig-scope") === "all") $("ig-scope").value = "all";
-  $("ig-scope").onchange = e => { store.set("wg-ig-scope", e.target.value); loadInstanceGraph(); };
-  ig.cy.on("dbltap", "node", e => { const d = e.target.data(); if (d.kind === "Wellbore" && d.full !== state.well) openWell(d.full); else ig.keep(e.target); });
+  ig = makeGraph("ig", {onPick: instanceDetail});
+  $("ig-kinds").innerHTML = Object.entries(KIND).filter(([kind]) => !["Wellbore", "DrillingEvent"].includes(kind))
+    .map(([kind, style]) => `<label><input type="checkbox" data-kind="${kind}" checked><i class="dot" style="background:${style.fill}"></i>${style.text}</label>`).join("");
+  for (const checkbox of $("ig-kinds").querySelectorAll("input")) checkbox.onchange = updateInstanceScope;
+  $("ig-events").onchange = updateInstanceScope;
+  $("ig-formations").onchange = updateInstanceScope;
+  $("ig-browse").onclick = () => { navigate("wellbore"); $("directory").open = true; $("well-search").focus(); };
+  ig.cy.on("dbltap", "node", e => ig.keep(e.target));
+}
+function positionInstanceNodes() {
+  const nodes = ig.cy.nodes(":visible");
+  const place = (group, columns, x, y, dx, dy) => group.forEach((n, i) => {
+    n.data("position", {x: x + i % columns * dx, y: y + Math.floor(i / columns) * dy});
+  });
+  const of = (...kinds) => nodes.filter(n => kinds.includes(n.data("kind")));
+  const admin = of("Organisation", "Field", "Document");
+  const geology = of("GeologicalFormation");
+  const holes = of("HoleSection");
+  place(of("Wellbore"), 1, 373, 18, 0, 0);
+  place(admin, 1, 66, 125, 0, 62);
+  place(geology, 2, 300, 125, 146, 62);
+  place(holes, 1, 674, 125, 0, 62);
+  const deepestRow = Math.max(admin.length, Math.ceil(geology.length / 2), holes.length);
+  place(of("DrillingEvent"), 12, 80, 153 + deepestRow * 62, 52, 47);
+}
+function updateInstanceScope() {
+  const eventType = $("ig-events").value, detailed = $("ig-formations").value === "all";
+  const events = igGraph.nodes.filter(n => n.kind === "DrillingEvent" && n.event_type === eventType);
+  const activeEvents = new Set(events.slice(0, GRAPH_EVENT_LIMIT).map(n => n.id));
+  const linkedUnits = new Set(igGraph.edges.filter(edge => activeEvents.has(edge.source)).map(edge => edge.target));
+  const hasGroups = igGraph.nodes.some(n => n.kind === "GeologicalFormation" && n.level === "GROUP");
+  const kinds = new Set([...$("ig-kinds").querySelectorAll("input:checked")].map(c => c.dataset.kind));
+  ig.cy.batch(() => {
+    ig.cy.elements().removeClass("out");
+    ig.cy.nodes().forEach(n => {
+      const d = n.data();
+      const shown = d.kind === "Wellbore" || (d.kind === "DrillingEvent" ? activeEvents.has(d.id)
+        : kinds.has(d.kind) && (d.kind !== "GeologicalFormation" || detailed || !hasGroups
+          || d.level === "GROUP" || linkedUnits.has(d.id)));
+      n.toggleClass("off", !shown);
+    });
+  });
+  ig.pick(null);
+  positionInstanceNodes();
+  ig.layout();
+  $("instancenote").textContent = `${number(ig.cy.nodes(":visible").length)} nodes shown for ${igGraph.wellbore}.` +
+    (eventType ? ` Showing ${number(activeEvents.size)} of ${number(events.length)} ${label(eventType)} records returned for this wellbore graph.`
+      : " Choose an event type to add its records and connected formations.") +
+    " Select a node for details or double-click to focus its neighbourhood.";
 }
 async function loadInstanceGraph() {
+  const well = state.well;
+  if (igGraph?.wellbore === well) return;
+  const graph = await api("/api/graph", {name: well});
+  if (state.view !== "graph" || well !== state.well) return;
   if (!ig) initInstanceGraph();
-  const scope = $("ig-scope");
-  scope.options[0].disabled = !state.detail;
-  if (!state.detail) scope.value = "all";
-  const all = scope.value === "all", key = all ? "*" : state.well;
-  if (key === igLoaded) return;
-  const g = await api("/api/graph", all ? {} : {name: state.well});
-  if (state.view !== "graph" || key !== (scope.value === "all" ? "*" : state.well)) return;
-  igLoaded = key;
+  igGraph = graph;
+  const events = graph.nodes.filter(n => n.kind === "DrillingEvent");
+  $("ig-events").innerHTML = '<option value="">Hidden</option>' + Object.keys(TYPES).filter(type => events.some(e => e.event_type === type))
+    .map(type => `<option value="${type}">${label(type)}</option>`).join("");
+  $("ig-formations").value = "groups";
   const short = t => t.length > 30 ? t.slice(0, 28) + "…" : t;
-  const nodes = g.nodes.map(n => { const st = KIND[n.kind], ev = n.kind === "DrillingEvent", fm = n.kind === "GeologicalFormation";
-    const text = n.kind === "HoleSection" ? inches(parseFloat(n.label)) : short(n.label);
-    return {data: {...n, full: n.label, text, base: st.base, level: st.level, big: n.kind === "Wellbore", dark: fm, hollow: ev && n.depth_basis !== "stated",
-      color: ev ? TYPES[n.event_type] : fm ? stratColour() : st.fill.startsWith("--") ? css(st.fill) : st.fill}}; });
-  const edges = g.edges.map((e, i) => ({data: {...e, id: "e" + i, len: e.source.startsWith("ev:") ? 45 : e.relation === "PART_OF" ? 55 : 95}}));
+  let reports = 0;
+  const nodes = graph.nodes.filter(n => KIND[n.kind]).map(n => {
+    const style = KIND[n.kind], event = n.kind === "DrillingEvent";
+    const text = n.kind === "HoleSection" ? inches(parseFloat(n.label))
+      : n.kind === "Document" ? `Report ${++reports}` : short(n.label);
+    return {classes: event ? "nolabel" : "instance-card", data: {...n, full: n.label, size: style.size,
+      text,
+      big: n.kind === "Wellbore", hollow: event && n.depth_basis !== "stated",
+      color: event ? TYPES[n.event_type] || style.fill : style.fill}};
+  });
+  const ids = new Set(nodes.map(node => node.data.id));
+  const edges = graph.edges.filter(e => ids.has(e.source) && ids.has(e.target))
+    .map((edge, i) => ({data: {...edge, id: "e" + i}}));
   ig.cy.batch(() => { ig.cy.elements().remove(); ig.cy.add([...nodes, ...edges]); });
-  ig.locked = null; instanceDetail(null); ig.sizes(); ig.filter(false); ig.layout(true);
-  const count = kind => g.nodes.filter(n => n.kind === kind).length;
-  $("instancetitle").textContent = all ? (g.overview ? `${g.wellbores < g.total_wellbores ? `The ${g.wellbores} wells with most events, of ${g.total_wellbores} with reports` : `${g.wellbores} wells with reports`}, joined through formations, operators and fields (open a well for its events)` : `All ${g.wellbores} wells with reports as one graph`) : `${g.wellbore} as a graph`;
-  $("instancenote").textContent = `${g.nodes.length} nodes and ${g.edges.length} edges: ${count("DrillingEvent")} events, each linked to the hole section and the formation it happened in` +
-    (all ? "; wells connect through the formations, operators and fields they share" : "") +
-    `. Drag any node to move it, scroll to zoom, drag the background to pan. Click a node for details, double-click it to keep only its neighbours` +
-    (all ? " (a wellbore: to open it)" : "") + `. Hollow events have a depth taken from context.`;
+  $("instancetitle").textContent = graph.wellbore + " · Data graph";
+  updateInstanceScope();
 }
 function instanceDetail(n) {
-  if (!n) { $("ig-detail").innerHTML = ""; return; }
+  if (!n) {
+    $("ig-detail").innerHTML = '<h3>Node details</h3><p class="small muted">Select a report, hole section, formation or event to inspect its links.</p>';
+    return;
+  }
   const d = n.data(), ev = d.kind === "DrillingEvent", near = {};
   n.neighborhood("node").forEach(m => { const k = KIND[m.data("kind")].text; near[k] = (near[k] || 0) + 1; });
   const facts = ev ? `${d.wellbore ? esc(d.wellbore) + " · " : ""}${d.depth_md == null ? "no depth" : fmt(d.depth_md) + " m"} (${basisText[d.depth_basis]})<br>${esc(d.description)}`
@@ -1131,7 +1404,7 @@ async function drillDown(group, type) {
 }
 
 // ---- map ----------------------------------------------------------------------------
-let overviewMap, offsetMap, offsetLayer, shelfBounds, mapData;
+let overviewMap, offsetMap, offsetLayer, selectedQuadrantLayer, shelfBounds, mapData;
 function createMap(id, layers) {
   const map = L.map(id, {zoomSnap: .25, minZoom: 3, maxZoom: 13, preferCanvas: true}).setView([64, 7], 4.5);
   map.attributionControl.setPrefix(false).addAttribution("Quadrants, blocks, fields, wells: SODIR (NLOD 2.0) · Land: Natural Earth");
@@ -1154,7 +1427,8 @@ async function loadOverviewMap(bounds) {
     if (!r.ok) throw new Error("Map layer unavailable: " + name);
     return r.json();
   }));
-  overviewMap = createMap("map", await mapData);
+  const layers = await mapData;
+  overviewMap = createMap("map", layers);
   const coords = state.reportWells.filter(hasLocation);
   for (const w of coords) {
     const hasEvent = w.events > 0;
@@ -1167,7 +1441,27 @@ async function loadOverviewMap(bounds) {
   shelfBounds = Number.isFinite(bounds.min_lat) && Number.isFinite(bounds.max_lat)
     ? L.latLngBounds([bounds.min_lat, bounds.min_lon], [bounds.max_lat, bounds.max_lon])
     : L.latLngBounds([55, -6], [81, 36]);
-  const fit = () => { overviewMap.invalidateSize(); overviewMap.fitBounds(shelfBounds, {padding: [20, 20], maxZoom: 6}); };
+  const gridButtons = $("coverage-chart").querySelectorAll("[data-quadrant]");
+  for (const button of gridButtons) button.onclick = () => {
+    selectedQuadrantLayer?.remove();
+    const name = button.dataset.quadrant;
+    const geometry = layers[1].features.find(f => String(f.properties.name) === name);
+    selectedQuadrantLayer = geometry ? L.geoJSON(geometry, {
+      interactive: false, style: {color: css("--accent"), weight: 2, fillOpacity: .04}
+    }).addTo(overviewMap) : null;
+    const bounds = selectedQuadrantLayer ? selectedQuadrantLayer.getBounds()
+      : state.reportWells.filter(w => quadrant(w) === name && hasLocation(w)).map(w => [w.lat, w.lon]);
+    for (const row of gridButtons) row.setAttribute("aria-pressed", row === button);
+    overviewMap.fitBounds(bounds, {padding: [30, 30], maxZoom: 9, animate: false});
+    $("map").scrollIntoView({block: "nearest"});
+  };
+  const fit = () => {
+    selectedQuadrantLayer?.remove();
+    selectedQuadrantLayer = null;
+    for (const button of gridButtons) button.setAttribute("aria-pressed", "false");
+    overviewMap.invalidateSize();
+    overviewMap.fitBounds(shelfBounds, {padding: [20, 20], maxZoom: 6, animate: false});
+  };
   $("reset-map").onclick = fit;
   if (state.section === "overview") fit();
 }
