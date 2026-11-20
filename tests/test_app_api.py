@@ -215,3 +215,18 @@ def test_map_wells_lists_every_positioned_wellbore_in_columns(client):
     assert d["fields"][one[3]] == "ALFA" and one[7] >= 1
     assert sum(one[9]) == sum(client.get("/api/well", params={"name": "99/1-1"}).json()["event_counts"].values())
     assert by_name["99/1-3"][3] == -1  # no field
+
+
+def test_pressure_window_returns_mud_leak_off_and_events(client):
+    d = client.get("/api/pressure", params={"name": "99/1-1", "range_km": 50}).json()
+    assert d["wellbore"] == "99/1-1" and d["range_km"] == 50
+    for part in (d["well"], d["offset"]):
+        assert {"mud", "lot", "events"} <= set(part)
+        for r in part["mud"] + part["lot"] + part["events"]:
+            assert 0.8 <= r["sg"] <= 2.6 and r["md"] is not None and r["wellbore"]
+    assert all(r["wellbore"] == "99/1-1" for r in d["well"]["mud"] + d["well"]["lot"] + d["well"]["events"])
+    assert all(r["event_type"] in ("kick", "lost_circulation") for r in d["well"]["events"] + d["offset"]["events"])
+    alone = client.get("/api/pressure", params={"name": "99/1-1", "range_km": 0}).json()
+    assert alone["offsets"] == [] and alone["offset"]["mud"] == []
+    assert client.get("/api/pressure").status_code == 400
+    assert client.get("/api/pressure", params={"name": "nope"}).status_code == 404

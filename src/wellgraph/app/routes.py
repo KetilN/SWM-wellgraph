@@ -16,7 +16,7 @@ from fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 
-from wellgraph.app import core_crossplot, well_clusters
+from wellgraph.app import core_crossplot, pressure, well_clusters
 from wellgraph.graph.store import GraphStore, NotFound
 
 ONTOLOGY = Path(os.environ.get("WELLGRAPH_ONTOLOGY")
@@ -199,6 +199,13 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return well_clusters.neighbourhood(
             store, name, float(range_km) if range_km else well_clusters.DEFAULT_RANGE_KM)
 
+    def pressure_window(request: Request):
+        name = _text(request, "name")
+        if not name:
+            raise ValueError("Give a wellbore name: /api/pressure?name=34/10-4&range_km=10")
+        range_km = _text(request, "range_km")
+        return pressure.window(store, name, float(range_km) if range_km else 10.0)
+
     def core_compare(request: Request):
         a, b = _text(request, "a"), _text(request, "b")
         if not a or not b:
@@ -220,6 +227,6 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
         "/api/reservoir": reservoir, "/api/poroperm": poroperm,
         "/api/core/overview": core_overview, "/api/core/filters": core_filters,
-        "/api/core/clusters": core_clusters, "/api/core/neighbours": core_neighbours, "/api/core/compare": core_compare,
+        "/api/core/clusters": core_clusters, "/api/core/neighbours": core_neighbours, "/api/core/compare": core_compare, "/api/pressure": pressure_window,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

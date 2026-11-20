@@ -229,6 +229,15 @@
   #view-cluster-compare svg text { font-size: 11px; fill: var(--muted); }
   #view-cluster-compare details { margin-top: 10px; }
   #view-cluster-compare summary { cursor: pointer; }
+  .pw-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 980px) { .pw-layout { grid-template-columns: 1fr; } }
+  #pw-plot { display: block; width: 100%; height: auto; }
+  #pw-plot text { font-size: 11px; fill: var(--muted); }
+  #pw-plot [data-event] { cursor: pointer; }
+  .pw-legend { display: grid; gap: 4px; padding: 10px 12px; background: var(--soft); border-radius: 8px; }
+  .pw-legend span { display: flex; gap: 8px; align-items: center; }
+  .pw-legend svg { flex: none; width: 16px; height: 14px; }
+  #view-pressure h4 { margin: 14px 0 6px; }
   .matrix-filters { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 10px 0 6px; }
   .matrix-filters label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
   .matrix-filters select { max-width: 230px; }
@@ -532,6 +541,19 @@
       <div id="offset-map" role="region" aria-label="Surface locations around the selected wellbore"></div>
       <div class="table-scroll"><table id="offset"></table></div>
     </div>
+    <div class="view" id="view-pressure">
+      <div class="panel-head"><div><h3 id="pw-title">Pressure window</h3><p class="small muted" id="pw-summary" role="status">Loading…</p></div>
+        <label for="pw-range">Offset wellbores within <select id="pw-range"><option value="0">none</option><option value="5">5 km</option><option value="10" selected>10 km</option><option value="20">20 km</option><option value="50">50 km</option></select></label></div>
+      <div class="pw-layout">
+        <div><svg id="pw-plot" role="img" aria-label="Mud weight used, leak-off tests, kicks and losses against depth"></svg></div>
+        <div>
+          <div class="pw-legend small" id="pw-legend"></div>
+          <h4>What the wellbores in range used and saw, by depth</h4>
+          <div class="table-scroll"><table id="pw-bins"></table></div>
+          <p class="small muted" id="pw-note"></p>
+        </div>
+      </div>
+    </div>
     <div class="view" id="view-matrix">
       <h3>Reported drilling events by stratigraphic unit</h3>
       <p class="small muted">Counts are extracted observations from loaded reports. Select a unit and event type to locate source evidence.</p>
@@ -556,10 +578,11 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/overview-map.js?v=26"></script>
-<script src="/static/core-overview.js?v=26"></script>
-<script src="/static/cluster-compare.js?v=26"></script>
-<script src="/static/well-clusters.js?v=26"></script>
+<script src="/static/overview-map.js?v=28"></script>
+<script src="/static/core-overview.js?v=28"></script>
+<script src="/static/cluster-compare.js?v=28"></script>
+<script src="/static/pressure.js?v=28"></script>
+<script src="/static/well-clusters.js?v=28"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -594,7 +617,7 @@ function depthText(e) {
 const SECTIONS = {
   wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
-    views: [["matrix", "Event overview"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
+    views: [["matrix", "Event overview"], ["nearby", "Offset wells", true], ["pressure", "Pressure window", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
     views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-cluster", true], ["cluster-compare", "Cluster comparison"]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
@@ -735,7 +758,7 @@ function navigate(section, requestedView) {
   }
   if (needsWell && (!state.detail || state.loading)) return;
   const loaders = {matrix: loadMatrix, nearby: loadOffsets, timedepth: loadTimeDepth,
-    "core-overview": initCoreOverview, poroperm: initPoroPerm, "well-clusters": initWellClusters, "cluster-compare": initClusterCompare, graph: loadInstanceGraph, model: loadModel};
+    "core-overview": initCoreOverview, poroperm: initPoroPerm, "well-clusters": initWellClusters, "cluster-compare": initClusterCompare, pressure: initPressure, graph: loadInstanceGraph, model: loadModel};
   if (loaders[view]) loaders[view]().catch(err => { if (state.view === view) showError(err); });
 }
 
@@ -1308,9 +1331,13 @@ async function loadTimeDepth() {
   $("tdtitle").textContent = `${well} · Drilling progress by date`;
   if (rows.length < 2) {
     $("timedepth").innerHTML = "";
-    $("tdnote").textContent = "Fewer than two dated depths are available in parsed daily report tables.";
+    $("timedepth").style.display = "none";
+    $("tdnote").textContent = d.rows.length
+      ? "No curve: the daily-report tables parsed for this wellbore give fewer than two dated depths."
+      : "No curve: no daily-report table could be parsed from this wellbore's reports. Reported events are in the Depth profile and the Well event log.";
     return;
   }
+  $("timedepth").style.display = "";
   const W = 640, H = 460, L = 58, R = 20, T = 22, B = 44;
   const day0 = new Date(rows[0].report_date), day = row => (new Date(row.report_date) - day0) / 864e5;
   let running = 0;
