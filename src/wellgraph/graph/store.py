@@ -298,6 +298,51 @@ class GraphStore:
             """
         )
 
+    def map_wells(self) -> dict[str, Any]:
+        """Every wellbore with a position, in columns, for the overview map.
+
+        `operators`, `fields` and `types` are lookup lists; each row holds indexes into them
+        (-1 for none). `events` is a list of counts in the order of `event_types`, or null
+        for a wellbore without events.
+        """
+        rows = self._rows(
+            """
+            with docs as (select wellbore_id, count(*) as n from document group by 1),
+                 cores as (select wellbore_id, count(*) as n from core_sample group by 1),
+                 ev as (select wellbore_id, event_type, count(*) as n from event group by 1, 2),
+                 evs as (select wellbore_id, map_from_entries(list((event_type, n))) as counts
+                         from ev group by 1)
+            select w.name, w.wellbore_type, w.operator, nullif(trim(w.field), '') as field,
+                   round(w.lat, 4) as lat, round(w.lon, 4) as lon, year(w.entry_date) as year,
+                   coalesce(d.n, 0) as documents, coalesce(c.n, 0) as core_samples, e.counts
+            from wb w left join docs d using (wellbore_id) left join cores c using (wellbore_id)
+                 left join evs e using (wellbore_id)
+            where isfinite(w.lat) and isfinite(w.lon)
+            order by w.name
+            """
+        )
+        lookups: dict[str, dict[str, int]] = {"operator": {}, "field": {}, "wellbore_type": {}}
+
+        def index(kind: str, value: str | None) -> int:
+            if not value:
+                return -1
+            return lookups[kind].setdefault(value, len(lookups[kind]))
+
+        out = []
+        for r in rows:
+            counts = r["counts"] or {}
+            out.append([
+                r["name"], index("wellbore_type", r["wellbore_type"]), index("operator", r["operator"]),
+                index("field", r["field"]), r["lat"], r["lon"], r["year"], r["documents"],
+                r["core_samples"], [counts.get(t, 0) for t in EVENT_TYPES] if counts else None,
+            ])
+        return {
+            "columns": ["name", "type", "operator", "field", "lat", "lon", "year", "documents",
+                        "core_samples", "events"],
+            "types": list(lookups["wellbore_type"]), "operators": list(lookups["operator"]),
+            "fields": list(lookups["field"]), "event_types": list(EVENT_TYPES), "wells": out,
+        }
+
     def mud_profile(self, wellbore: str) -> list[dict[str, Any]]:
         """SODIR mud weight measurements for one wellbore, by depth."""
         wid = self.resolve_wellbore(wellbore)["wellbore_id"]

@@ -184,13 +184,33 @@
               border-radius: 6px; padding: 8px 10px; margin-top: 8px; color: var(--muted); }
   mark { background: var(--mark); color: var(--mark-ink); padding: 0 1px; border-radius: 2px; }
   a { color: var(--accent); }
-  #map, #offset-map { height: clamp(360px, 61vh, 670px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  #map { height: clamp(480px, 78vh, 860px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  #offset-map { height: clamp(360px, 61vh, 670px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   #offset-map { height: 310px; margin-bottom: 12px; }
   #cluster-map { height: 420px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   .cluster-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin: 10px 0 4px; }
   .well-picker { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 10px; }
   .well-picker label { font-weight: 650; }
   .well-picker input { width: min(320px, 100%); }
+  .ov-screens { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; padding: 12px 14px; margin-bottom: 10px; }
+  .ov-screens label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .ov-screens select { max-width: 220px; }
+  .ov-stats { display: flex; gap: 8px 28px; flex-wrap: wrap; margin: 4px 2px 12px; }
+  .ov-stats div { display: grid; }
+  .ov-stats strong { font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .ov-stats span { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .ov-regions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ov-side { display: grid; gap: 12px; align-content: start; }
+  .ov-side .panel { padding: 12px 14px; }
+  .ov-side h4 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ov-side label { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  .ov-legend div { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
+  .ov-legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
+  .ov-legend i.sq { border-radius: 2px; width: 16px; }
+  #ov-inspector dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; }
+  #ov-inspector dt { color: var(--muted); }
+  #ov-inspector dd { margin: 0; }
+  .ov-label { font-size: 11px; font-weight: 600; color: #1d2b36; white-space: nowrap; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; pointer-events: none; }
   .matrix-filters { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 10px 0 6px; }
   .matrix-filters label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
   .matrix-filters select { max-width: 230px; }
@@ -241,18 +261,41 @@
   <section id="overview" aria-labelledby="overview-title">
     <div class="section-head"><div><h2 id="overview-title">Norwegian continental shelf</h2><p class="muted">Explore the report footprint and open a wellbore for depth, drilling and core data.</p></div><button id="browse-wellbores" class="primary">Find a wellbore</button></div>
     <div id="sources" class="source-grid" aria-label="Data sources and coverage"></div>
+    <div class="panel ov-screens" aria-label="Which wellbores to show">
+      <label>Colour wellbores by<select id="ov-colour">
+        <option value="data">Data available</option><option value="events">Events per wellbore</option>
+        <option value="type">Wellbore type</option><option value="decade">Decade drilled</option></select></label>
+      <label>Operator<select id="ov-operator"></select></label>
+      <label>Field<select id="ov-field"></select></label>
+      <label>Wellbore type<select id="ov-type"></select></label>
+      <label>Data available<select id="ov-data">
+        <option value="">Any</option><option value="report">Report loaded</option><option value="events">Extracted events</option>
+        <option value="core">Core measurements</option><option value="both">Events and core</option><option value="none">No report and no core</option></select></label>
+      <label>Event type<select id="ov-event"></select></label>
+      <button id="ov-clear">Clear screens</button>
+      <span class="small muted" id="ov-scope" role="status"></span>
+    </div>
+    <div id="ov-stats" class="ov-stats" aria-label="Counts for the wellbores shown"></div>
     <div class="overview-grid">
       <article class="panel map-panel">
-        <div class="panel-head"><div><h3>Report coverage map</h3><p class="small muted" id="overview-mapnote"></p></div><button id="reset-map">Fit shelf</button></div>
-        <div id="map" aria-label="Norwegian continental shelf report coverage" role="region"></div>
-        <p class="legend small muted"><span><i class="dot signal"></i>Extracted events</span><span><i class="dot report-dot"></i>Report loaded</span><span><i class="sw field-swatch"></i>Field outline</span></p>
+        <div class="ov-regions" aria-label="Zoom">
+          <button data-region="shelf">Whole shelf</button><button data-region="north">North Sea</button>
+          <button data-region="norwegian">Norwegian Sea</button><button data-region="barents">Barents Sea</button>
+          <button data-region="selection">Zoom to the wellbores shown</button>
+        </div>
+        <div id="map" aria-label="Map of wellbores on the Norwegian continental shelf" role="region"></div>
+        <p class="small muted" id="overview-mapnote"></p>
       </article>
-      <aside class="panel coverage-panel">
-        <h3>Wellbores with reports</h3>
-        <p class="coverage-total" id="coverage-total"></p>
-        <h4>Top 10 offshore grid areas</h4>
-        <p class="small muted">A quadrant is a numbered SODIR grid area: in 25/7-2, 25 is the quadrant and 7 is the block. Select an area to zoom the map. Bars show counts on a shared scale. <a href="https://www.sodir.no/en/facts/wells/well-classification/">Well naming guide</a></p>
-        <ol id="coverage-chart" class="bar-list"></ol>
+      <aside class="ov-side">
+        <div class="panel"><h4>Layers</h4>
+          <label><input type="checkbox" id="ov-l-wells" checked> Wellbores matching the screens</label>
+          <label><input type="checkbox" id="ov-l-others" checked> Other wellbores, in grey</label>
+          <label><input type="checkbox" id="ov-l-fields" checked> Fields</label>
+          <label><input type="checkbox" id="ov-l-labels" checked> Field names</label>
+          <label><input type="checkbox" id="ov-l-blocks"> Shade blocks by matching wellbores</label>
+        </div>
+        <div class="panel"><h4>Legend</h4><div id="ov-legend" class="ov-legend small"></div></div>
+        <div class="panel"><h4>Inspector</h4><div id="ov-inspector" class="small">Hover a wellbore, field or block. Select a wellbore to open it.</div></div>
       </aside>
     </div>
   </section>
@@ -454,8 +497,9 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/core-overview.js?v=19"></script>
-<script src="/static/well-clusters.js?v=19"></script>
+<script src="/static/overview-map.js?v=21"></script>
+<script src="/static/core-overview.js?v=21"></script>
+<script src="/static/well-clusters.js?v=21"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -647,19 +691,6 @@ function renderOverview(graph, ontology) {
   ];
   $("sources").innerHTML = sources.map(([source, count, unit, detail, url, link]) =>
     `<article class="panel source-card"><h3>${source}</h3><p><strong>${number(count)}</strong><span>${unit}</span></p><span>${detail}</span><a href="${url}">${link}</a></article>`).join("");
-  $("coverage-total").innerHTML = `<strong>${number(coverage.wellbores_with_documents)} of ${number(c.wellbore)}</strong><span class="small muted">wellbores in this snapshot have at least one loaded report</span>`;
-  const byQuadrant = new Map();
-  for (const well of state.reportWells) {
-    const key = quadrant(well);
-    if (!byQuadrant.has(key)) byQuadrant.set(key, []);
-    byQuadrant.get(key).push(well);
-  }
-  const ranked = [...byQuadrant].sort((a, b) => b[1].length - a[1].length).slice(0, 10);
-  $("coverage-chart").innerHTML = ranked.map(([name, wells]) =>
-    `<li><button data-quadrant="${esc(name)}" aria-pressed="false" ${wells.some(hasLocation) ? "" : "disabled"}><span class="bar-label"><span>Grid ${esc(name)}</span><strong>${number(wells.length)}</strong></span><span class="bar-track" aria-hidden="true" style="display:block"><i style="width:${wells.length / ranked[0][1].length * 100}%"></i></span></button></li>`).join("")
-    || "<li>No reports loaded.</li>";
-  const mapped = state.reportWells.filter(hasLocation).length;
-  $("overview-mapnote").textContent = `${number(mapped)} report-bearing wellbores with surface coordinates. Select a marker to open a wellbore.`;
 }
 
 function initDirectory() {
@@ -1575,50 +1606,6 @@ function createMap(id, layers) {
   map.on("zoomend", showBlocks);
   showBlocks();
   return map;
-}
-async function loadOverviewMap(bounds) {
-  mapData = Promise.all(["land", "quadrants", "blocks", "fields"].map(async name => {
-    const r = await fetch(`/static/geo/${name}.geojson`);
-    if (!r.ok) throw new Error("Map layer unavailable: " + name);
-    return r.json();
-  }));
-  const layers = await mapData;
-  overviewMap = createMap("map", layers);
-  const coords = state.reportWells.filter(hasLocation);
-  for (const w of coords) {
-    const hasEvent = w.events > 0;
-    L.circleMarker([w.lat, w.lon], {
-      radius: hasEvent ? 3.4 : 2.7, weight: .5, color: css("--panel"),
-      fillColor: css(hasEvent ? "--signal" : "--report-dot"), fillOpacity: .78
-    }).bindTooltip(`${esc(w.name)} · ${number(w.documents)} reports · ${number(w.events)} extracted events`)
-      .on("click", () => openWell(w.name)).addTo(overviewMap);
-  }
-  shelfBounds = Number.isFinite(bounds.min_lat) && Number.isFinite(bounds.max_lat)
-    ? L.latLngBounds([bounds.min_lat, bounds.min_lon], [bounds.max_lat, bounds.max_lon])
-    : L.latLngBounds([55, -6], [81, 36]);
-  const gridButtons = $("coverage-chart").querySelectorAll("[data-quadrant]");
-  for (const button of gridButtons) button.onclick = () => {
-    selectedQuadrantLayer?.remove();
-    const name = button.dataset.quadrant;
-    const geometry = layers[1].features.find(f => String(f.properties.name) === name);
-    selectedQuadrantLayer = geometry ? L.geoJSON(geometry, {
-      interactive: false, style: {color: css("--accent"), weight: 2, fillOpacity: .04}
-    }).addTo(overviewMap) : null;
-    const bounds = selectedQuadrantLayer ? selectedQuadrantLayer.getBounds()
-      : state.reportWells.filter(w => quadrant(w) === name && hasLocation(w)).map(w => [w.lat, w.lon]);
-    for (const row of gridButtons) row.setAttribute("aria-pressed", row === button);
-    overviewMap.fitBounds(bounds, {padding: [30, 30], maxZoom: 9, animate: false});
-    $("map").scrollIntoView({block: "nearest"});
-  };
-  const fit = () => {
-    selectedQuadrantLayer?.remove();
-    selectedQuadrantLayer = null;
-    for (const button of gridButtons) button.setAttribute("aria-pressed", "false");
-    overviewMap.invalidateSize();
-    overviewMap.fitBounds(shelfBounds, {padding: [20, 20], maxZoom: 6, animate: false});
-  };
-  $("reset-map").onclick = fit;
-  if (state.section === "overview") fit();
 }
 async function drawOffsetMap(origin, radiusKm, nearby) {
   if (!hasLocation(origin)) return;

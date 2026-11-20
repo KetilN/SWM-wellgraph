@@ -203,3 +203,15 @@ def test_event_matrix_follows_field_wellbore_and_unit_filters(client):
     assert listed["total"] == alfa["rows"][0]["counts"]["lost_circulation"] if alfa["rows"][0]["group"] == "SHETLAND GP" else True
     assert {e["wellbore"] for e in listed["results"]} <= {"99/1-1", "99/1-2 A"}
     assert client.get("/api/matrix", params={"wellbore": "nope"}).status_code == 404
+
+
+def test_map_wells_lists_every_positioned_wellbore_in_columns(client):
+    d = client.get("/api/map_wells").json()
+    assert d["columns"][:6] == ["name", "type", "operator", "field", "lat", "lon"]
+    by_name = {w[0]: w for w in d["wells"]}
+    assert {"99/1-1", "99/1-2 A", "99/1-3"} <= set(by_name)
+    one = by_name["99/1-1"]
+    assert d["types"][one[1]] == "EXPLORATION" and d["operators"][one[2]] == "Alpha Oil"
+    assert d["fields"][one[3]] == "ALFA" and one[7] >= 1
+    assert sum(one[9]) == sum(client.get("/api/well", params={"name": "99/1-1"}).json()["event_counts"].values())
+    assert by_name["99/1-3"][3] == -1  # no field

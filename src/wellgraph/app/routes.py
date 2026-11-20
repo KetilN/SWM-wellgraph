@@ -86,6 +86,9 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
     def report_wells(request: Request):
         return {"results": store.report_wells()}
 
+    def map_wells(request: Request):
+        return store.map_wells()
+
     def wells(request: Request):
         near = _text(request, "near")
         out = store.find_wells(
@@ -203,7 +206,7 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return store.evidence(event_id, include_page_text=_flag(request, "page_text"))
 
     for path, handler in {
-        "/api/describe": describe, "/api/report_wells": report_wells, "/api/wells": wells,
+        "/api/describe": describe, "/api/report_wells": report_wells, "/api/map_wells": map_wells, "/api/wells": wells,
         "/api/well": well, "/api/events": events, "/api/offset": offset,
         "/api/evidence": evidence, "/api/graph": graph, "/api/ontology": ontology,
         "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
