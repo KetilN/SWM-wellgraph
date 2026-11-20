@@ -188,6 +188,9 @@
   #offset-map { height: 310px; margin-bottom: 12px; }
   #cluster-map { height: 420px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   .cluster-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin: 10px 0 4px; }
+  .well-picker { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 10px; }
+  .well-picker label { font-weight: 650; }
+  .well-picker input { width: min(320px, 100%); }
   .matrix-filters { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: end; margin: 10px 0 6px; }
   .matrix-filters label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
   .matrix-filters select { max-width: 230px; }
@@ -274,6 +277,13 @@
   <section id="analysis-workspace" hidden aria-labelledby="workspace-title">
     <div class="section-head" id="workspace-heading"><div><h2 id="workspace-title"></h2><p class="muted" id="workspace-description"></p></div></div>
     <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button><button id="open-well-graph">Well data graph</button></div></div>
+    <div id="well-picker" class="panel well-picker" hidden>
+      <label for="section-well" id="section-well-label">Wellbore</label>
+      <input id="section-well" type="search" list="well-list" autocomplete="off" placeholder="Type a name or block, e.g. 34/10-4">
+      <button id="section-well-clear">Clear</button>
+      <span class="small muted" id="section-well-note"></span>
+      <datalist id="well-list"></datalist>
+    </div>
     <p id="analysis-status" class="muted" role="status"></p>
     <div id="workspace" class="panel analysis-panel">
       <div class="tabs" id="analysis-tabs" aria-label="Views"></div>
@@ -442,8 +452,8 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/core-overview.js?v=17"></script>
-<script src="/static/well-clusters.js?v=17"></script>
+<script src="/static/core-overview.js?v=18"></script>
+<script src="/static/well-clusters.js?v=18"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -491,6 +501,51 @@ const number = value => new Intl.NumberFormat("en-GB").format(value);
 const wellKey = value => value.toUpperCase().trim().replace(/^(\d+)_(\d+)/, "$1/$2").replace(/[\s_]+/g, "");
 const hasLocation = well => Number.isFinite(well.lat) && Number.isFinite(well.lon);
 
+// Each section keeps its own wellbore. state.well / state.detail hold the wellbore of the section
+// on screen; moving to another section swaps them for that section's own choice.
+const sectionWell = {wellbore: null, drilling: null, reservoir: null, knowledge: null};
+const SECTION_NAMES = {drilling: "Drilling", reservoir: "Reservoir", knowledge: "Knowledge graph"};
+const wellCache = new Map();
+function clearWell() {
+  state.wellRequest++;
+  state.well = null; state.detail = null; state.core = []; state.loading = false;
+  state.selected = null; state.off.clear(); state.filter = null; state.profileWindow = null;
+}
+// Go to another section and take the wellbore on screen along (an explicit "open this well there").
+function carry(section, view) {
+  if (state.well) sectionWell[section] = state.well;
+  navigate(section, view);
+}
+function renderWellPicker(section) {
+  const shown = section in SECTION_NAMES;
+  $("well-picker").hidden = !shown;
+  if (!shown) return;
+  const input = $("section-well"), current = sectionWell[section];
+  $("section-well-label").textContent = `Wellbore for ${SECTION_NAMES[section]}`;
+  if (document.activeElement !== input) input.value = current || "";
+  $("section-well-clear").hidden = !current;
+  $("section-well-note").textContent = current ? "Used only in this section." : "Pick from the list. Each section keeps its own wellbore.";
+  const choose = event => {
+    const key = wellKey(input.value);
+    if (!key) return;
+    const hit = state.reportWells.find(w => wellKey(w.name) === key);
+    if (!hit) { $("section-well-note").textContent = "Keep typing, then pick a wellbore from the list."; return; }
+    // while typing, 34/10-1 is also the start of 34/10-13: wait for Enter or a pick from the list
+    const typing = event && event.type === "input" && event.inputType === "insertText";
+    if (typing && state.reportWells.some(w => w !== hit && wellKey(w.name).startsWith(key))) {
+      $("section-well-note").textContent = "Press Enter for " + hit.name + ", or keep typing.";
+      return;
+    }
+    if (hit.name === sectionWell[state.section]) return;
+    input.blur();
+    openWell(hit.name, state.section, state.view).catch(showError);
+  };
+  input.oninput = choose;
+  input.onchange = choose;
+  input.onkeydown = event => { if (event.key === "Enter") choose(event); };
+  $("section-well-clear").onclick = () => { sectionWell[state.section] = null; input.value = ""; navigate(state.section, state.view); };
+}
+
 function showError(err) {
   $("analysis-status").textContent = err.message;
 }
@@ -500,6 +555,12 @@ function navigate(section, requestedView) {
   const config = SECTIONS[section];
   const view = requestedView || config?.views[0][0];
   state.view = view;
+  if (config && sectionWell[section] !== state.well) {
+    // this section has another wellbore (or none) than the one on screen: swap it in
+    if (sectionWell[section]) { openWell(sectionWell[section], section, view).catch(showError); return; }
+    clearWell();
+  }
+  renderWellPicker(section);
   $("overview").hidden = section !== "overview";
   $("well-directory").hidden = section !== "wellbore";
   $("analysis-workspace").hidden = !config;
@@ -528,10 +589,8 @@ function navigate(section, requestedView) {
     panel.classList.toggle("on", active);
   }
   if (needsWell && !state.detail && !state.loading && section !== "wellbore") {
-    const link = document.createElement("button");
-    link.textContent = "Find a wellbore";
-    link.onclick = () => navigate("wellbore");
-    $("analysis-status").append("Choose a wellbore to open this view. ", link);
+    $("analysis-status").textContent = "This view needs a wellbore: choose one in the box above.";
+    if (document.activeElement !== $("section-well")) $("section-well").focus({preventScroll: true});
   }
   if (needsWell && (!state.detail || state.loading)) return;
   const loaders = {matrix: loadMatrix, nearby: loadOffsets, timedepth: loadTimeDepth,
@@ -604,12 +663,12 @@ function renderDirectory() {
 async function init() {
   for (const button of document.querySelectorAll("[data-section]")) button.onclick = () => navigate(button.dataset.section);
   $("browse-wellbores").onclick = () => { navigate("wellbore"); $("well-search").focus(); };
-  $("open-well-events").onclick = () => navigate("drilling", "table");
-  $("open-well-offsets").onclick = () => navigate("drilling", "nearby");
-  $("open-well-graph").onclick = () => navigate("knowledge", "graph");
+  $("open-well-events").onclick = () => carry("drilling", "table");
+  $("open-well-offsets").onclick = () => carry("drilling", "nearby");
+  $("open-well-graph").onclick = () => carry("knowledge", "graph");
   $("open-well-core").onclick = () => {
     state.preferWellFormation = true;
-    navigate("reservoir", "poroperm");
+    carry("reservoir", "poroperm");
   };
   $("radius").onchange = e => { state.radius = +e.target.value; loadOffsets().catch(showError); };
   $("profile-range").onsubmit = e => {
@@ -634,6 +693,8 @@ async function init() {
       api("/api/describe"), api("/api/report_wells"), api("/api/ontology"),
     ]);
     state.reportWells = reportWells.results;
+    $("well-list").innerHTML = state.reportWells.map(w =>
+      `<option value="${esc(w.name)}">${esc([w.field, w.events ? number(w.events) + " events" : "", w.has_core ? "core" : ""].filter(Boolean).join(" · "))}</option>`).join("");
     renderOverview(graph, ontology);
     initDirectory();
     await loadOverviewMap(graph.coverage.bounding_box);
@@ -645,6 +706,7 @@ async function init() {
 
 async function openWell(name, nextSection = "wellbore", nextView) {
   const request = ++state.wellRequest;
+  if (nextSection in sectionWell) sectionWell[nextSection] = name;
   state.well = name;
   state.detail = null;
   state.loading = true;
@@ -656,7 +718,11 @@ async function openWell(name, nextSection = "wellbore", nextView) {
   navigate(nextSection, nextView);
   if (nextSection === "wellbore") $("directory").open = false;
   try {
-    const [detail, core] = await Promise.all([api("/api/well", {name}), api("/api/core", {name})]);
+    if (!wellCache.has(name)) {
+      wellCache.set(name, Promise.all([api("/api/well", {name}), api("/api/core", {name})]));
+      wellCache.get(name).catch(() => wellCache.delete(name));
+    }
+    const [detail, core] = await wellCache.get(name);
     if (request !== state.wellRequest) return;
     state.detail = detail;
     state.core = core.samples;
@@ -671,7 +737,10 @@ async function openWell(name, nextSection = "wellbore", nextView) {
   } catch (err) {
     if (request !== state.wellRequest) return;
     state.loading = false;
-    $("directory").open = true;
+    if (sectionWell[nextSection] === name) sectionWell[nextSection] = null;
+    clearWell();
+    navigate(state.section, state.view);
+    if (state.section === "wellbore") $("directory").open = true;
     showError(err);
   }
 }
@@ -703,7 +772,7 @@ function visibleEvents() {
 function setFilter(filter) {
   state.filter = state.filter && filter && state.filter.kind === filter.kind && state.filter.value === filter.value ? null : filter;
   renderChips(); renderTable(); renderStrip();
-  if (state.filter) navigate("drilling", "table");
+  if (state.filter) carry("drilling", "table");
 }
 function renderChips() {
   const counts = {}; for (const e of state.detail.events) counts[e.event_type] = (counts[e.event_type] || 0) + 1;
@@ -748,7 +817,7 @@ function renderTable() {
 async function select(id) {
   state.selected = id;
   if (state.detail) { renderTable(); renderStrip(); }
-  navigate("drilling", "source");
+  carry("drilling", "source");
   const box = $("evidence"); box.innerHTML = '<p class="muted small">Loading source…</p>';
   try {
     const ev = await api("/api/evidence", {id, page_text: 1});
@@ -1045,7 +1114,7 @@ function renderPlugInspector(local) {
   depthButton.onclick = () => {
     const md = Number(depthButton.dataset.md);
     setDepthWindow([Math.max(0, Math.floor(md - 25)), Math.min(state.profileLimit, Math.ceil(md + 25))]);
-    navigate("wellbore", "strip");
+    carry("wellbore", "strip");
     $("profile-range").scrollIntoView({block: "nearest"});
   };
   inspect("");
@@ -1289,7 +1358,7 @@ function initInstanceGraph() {
   for (const checkbox of $("ig-kinds").querySelectorAll("input")) checkbox.onchange = updateInstanceScope;
   $("ig-events").onchange = updateInstanceScope;
   $("ig-formations").onchange = updateInstanceScope;
-  $("ig-browse").onclick = () => { navigate("wellbore"); $("directory").open = true; $("well-search").focus(); };
+  $("ig-browse").onclick = () => { $("section-well").select(); $("section-well").focus(); };
   ig.cy.on("dbltap", "node", e => ig.keep(e.target));
 }
 function positionInstanceNodes() {
@@ -1380,7 +1449,7 @@ function instanceDetail(n) {
     <p class="small muted" style="margin:4px 0">Linked to ${Object.entries(near).map(([k, c]) => `${c} ${k}${c === 1 ? "" : "s"}`).join(", ") || "nothing"}</p>
     <p style="margin:6px 0 2px">${acts.map(([a, t]) => `<button data-act="${a}">${esc(t)}</button>`).join(" ")}</p></div>`;
   for (const b of $("ig-detail").querySelectorAll("[data-act]")) b.onclick = () => ({
-    source: () => select(d.event_id), open: () => openWell(d.full), keep: () => ig.keep(n),
+    source: () => select(d.event_id), open: () => openWell(d.full, "knowledge", "graph"), keep: () => ig.keep(n),
     filter: () => setFilter(d.kind === "HoleSection" ? {kind: "hole", value: parseFloat(d.label)} : {kind: "fm", value: d.label}),
   })[b.dataset.act]();
 }
@@ -1533,7 +1602,7 @@ async function drawOffsetMap(origin, radiusKm, nearby) {
     const marker = L.circleMarker([w.lat, w.lon], {radius: w.has_report ? 4 : 2.5, stroke: false,
       fillColor: css(colour), fillOpacity: w.has_report ? .85 : .45}).addTo(offsetLayer);
     marker.bindTooltip(`${esc(w.name)} · ${fmt(w.distance_km, 1)} km${w.events ? ` · ${number(w.events)} extracted events` : ""}`);
-    if (w.has_report) marker.on("click", () => openWell(w.name));
+    if (w.has_report) marker.on("click", () => openWell(w.name, "drilling", "nearby").catch(showError));
   }
   L.circleMarker([origin.lat, origin.lon], {radius: 6, weight: 1.5, color: css("--panel"), fillColor: css("--ink"), fillOpacity: 1})
     .bindTooltip(esc(origin.name)).addTo(offsetLayer);
