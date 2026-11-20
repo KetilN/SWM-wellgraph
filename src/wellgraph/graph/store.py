@@ -26,7 +26,11 @@ from .schema import (
     TABLES,
 )
 
-MAX_LIMIT = 200
+MAX_LIMIT = 100
+GRAPH_EVENT_LIMIT = 200  # events drawn in one wellbore graph (app only)
+GROUP_ID_LIMIT = 5  # event ids and wellbore names listed per group in offset analysis
+OFFSET_WELL_LIMIT = 50
+OFFSET_GROUP_LIMIT = 40  # event-type x hole-size groups returned, largest first
 MATRIX_GROUP_SQL = "coalesce(e.formations[1], '(no formation)')"
 SHARED_KINDS = {"GeologicalFormation", "Organisation", "Field"}
 MAX_PAGE_TEXT_CHARS = 8000
@@ -72,7 +76,7 @@ _UNIT_SUFFIX = [
 
 def normalise_formation(name: str) -> str:
     """'Shetland Group' -> 'SHETLAND GP' (SODIR spelling)."""
-    text = " ".join(name.upper().split())
+    text = " ".join(name.upper().replace(".", " ").split())
     for pattern, short in _UNIT_SUFFIX:
         text = pattern.sub(short, text)
     return text
@@ -85,10 +89,10 @@ def _wellbore_key(name: str) -> str:
     return re.sub(r"[\s_]+", "", text)
 
 
-def _clamp(limit: int | None) -> int:
+def _clamp(limit: int | None, cap: int = 0) -> int:
     if limit is None:
         return DEFAULT_LIMIT
-    return max(1, min(int(limit), MAX_LIMIT))
+    return max(1, min(int(limit), cap or MAX_LIMIT))
 
 
 class GraphStore:
@@ -241,6 +245,10 @@ class GraphStore:
                         "group by 1 order by n desc limit 15"
                     )
                 ],
+                "blocks_note": (
+                    "blocks lists only the 15 blocks with most wellbores; coverage is the "
+                    "whole shelf (see bounding_box), not just these."
+                ),
                 "bounding_box": bounds,
             },
             "event_types": EVENT_TYPES,
@@ -499,7 +507,8 @@ class GraphStore:
         """The part of the graph around one wellbore, as nodes and edges for drawing."""
         summary = self.well_summary(wellbore)
         wb = summary["wellbore"]
-        events = self.query_events(wellbore=wb["name"], limit=MAX_LIMIT)["results"]
+        events = self.query_events(wellbore=wb["name"], limit=GRAPH_EVENT_LIMIT,
+                                   _cap=GRAPH_EVENT_LIMIT)["results"]
         nodes: dict[str, dict[str, Any]] = {}
         edges: list[dict[str, str]] = []
 
@@ -790,8 +799,9 @@ class GraphStore:
         limit: int | None = None,
         *,
         matrix_group: str | None = None,
+        _cap: int = 0,
     ) -> dict[str, Any]:
-        limit = _clamp(limit)
+        limit = _clamp(limit, _cap)
         origin = self._origin(near_wellbore, lat, lon)
         clause, params, distance = self._event_filter(
             event_type, formation, hole_size, wellbore, origin, radius_km,
@@ -825,7 +835,23 @@ class GraphStore:
             }
         out = self._page(rows, limit, total)
         out["note"] = None if self.loaded["event"] else NO_EVENTS_NOTE
+        if formation and not total and out["note"] is None:
+            out["note"] = self._formation_note(formation)
         return out
+
+    def _formation_note(self, formation: str) -> str | None:
+        """Why a formation filter may have matched nothing."""
+        key = normalise_formation(formation)
+        known = self._scalar(
+            "select count(*) from formation_top where upper(formation) like ?", [key + "%"]
+        )
+        if known:
+            return None
+        return (
+            f"No lithostratigraphic unit starts with {key!r} in the SODIR formation tops. "
+            "Check the spelling (e.g. 'Shetland Group', 'TOR FM', 'Draupne'); find_wells "
+            "with formation=... shows which wells penetrate a unit."
+        )
 
     def offset_analysis(
         self,
@@ -874,12 +900,20 @@ class GraphStore:
                    round(max(coalesce(e.base_md, e.context_base_md))
                        filter (where {measured}), 1) as deepest_md,
                    list(distinct w.name order by w.name) as wellbores,
-                   list(e.event_id order by e.event_id) as event_ids
+                   list(e.event_id order by e.confidence desc nulls last, e.event_id)
+                       as event_ids
             from event e join wb w using (wellbore_id) where {clause}
             group by 1, 2 order by events desc, e.event_type, e.hole_diameter_in
             """,
             params,
         )
+        matching = len({name for row in summary for name in row["wellbores"]})
+        groups, events_total = len(summary), sum(row["events"] for row in summary)
+        summary = summary[:OFFSET_GROUP_LIMIT]
+        for row in summary:
+            # counts stay complete; the lists are a sample, query_events returns the rest
+            row["wellbores"] = row["wellbores"][:GROUP_ID_LIMIT]
+            row["event_ids"] = row["event_ids"][:GROUP_ID_LIMIT]
         return {
             "origin": {"lat": origin[0], "lon": origin[1], "wellbore": near_wellbore},
             "radius_km": radius,
@@ -888,11 +922,18 @@ class GraphStore:
                 "nearby_wellbores": len(wells),
                 "wellbores_with_reports": sum(w["has_report"] for w in wells),
                 "wellbores_with_extracted_events": sum(w["events"] > 0 for w in wells),
-                "wellbores_with_matching_events": len({
-                    name for row in summary for name in row["wellbores"]
-                }),
+                "wellbores_with_matching_events": matching,
             },
-            "wells": wells[:MAX_LIMIT],
+            "wells": wells[:OFFSET_WELL_LIMIT],
+            "matching_events": events_total,
+            "summary_groups": groups,
+            "lists_capped": (
+                f"wells shows the nearest {OFFSET_WELL_LIMIT}; summary shows the "
+                f"{OFFSET_GROUP_LIMIT} largest of summary_groups groups, each listing at "
+                f"most {GROUP_ID_LIMIT} wellbores and {GROUP_ID_LIMIT} event_ids (highest "
+                "extraction confidence first). Counts cover everything; use query_events "
+                "with the same filters for the full list."
+            ),
             "summary": summary,
             "lessons": self._rows(
                 f"select w.name as wellbore, e.event_id, e.event_type, e.lesson "
@@ -912,11 +953,9 @@ class GraphStore:
                    e.hole_diameter_in, e.formations, e.text_span, e.page_no, e.confidence,
                    e.document_id, d.title, d.relative_path, d.n_pages,
                    d.report_type, d.delivery_company, d.quality_remark,
-                   cast(d.release_date as varchar) as release_date,
-                   p.summary as page_summary, p.quality as page_quality, p.text as page_text
+                   cast(d.release_date as varchar) as release_date
             from event e join wb w using (wellbore_id)
             left join document d using (document_id)
-            left join page p on p.document_id = e.document_id and p.page_no = e.page_no
             where e.event_id = ?
             """,
             [event_id],
@@ -924,6 +963,15 @@ class GraphStore:
         if not rows:
             raise NotFound(f"No event with id {event_id!r}. Get ids from query_events.")
         r = rows[0]
+        # the page is read on its own, by document and page number, so the page table
+        # (the largest by far) is filtered while scanning and never joined in memory
+        page = self._rows(
+            "select summary as page_summary, quality as page_quality, text as page_text "
+            "from page where document_id = ? and page_no = ? limit 1",
+            [r["document_id"], r["page_no"]],
+        )
+        r.update(page[0] if page else
+                 {"page_summary": None, "page_quality": None, "page_text": None})
         page_text = r.pop("page_text")
         if include_page_text:
             r["page_text"] = None if page_text is None else page_text[:MAX_PAGE_TEXT_CHARS]

@@ -1,6 +1,6 @@
 import pytest
 
-from wellgraph.graph.store import GraphStore, NotFound, parse_hole_size
+from wellgraph.graph.store import GraphStore, NotFound, normalise_formation, parse_hole_size
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ def test_offset_coverage_distinguishes_reports_from_matching_events(store):
 
 
 def test_offset_coverage_is_independent_of_the_well_list_limit(store, monkeypatch):
-    monkeypatch.setattr("wellgraph.graph.store.MAX_LIMIT", 1)
+    monkeypatch.setattr("wellgraph.graph.store.OFFSET_WELL_LIMIT", 1)
     out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35, hole_size=100)
     assert len(out["wells"]) == 1
     assert out["coverage"]["wellbores_with_reports"] == 2
@@ -379,3 +379,22 @@ def test_core_samples_and_cross_plot_points(core_store):
         "porosity_p50": None, "kh_p50_md": None, "lithologies": [], "methods": [],
         "points": [], "fit": None,
     }
+
+
+def test_evidence_for_an_unknown_event_is_a_clear_not_found(store):
+    with pytest.raises(NotFound, match="No event with id"):
+        store.evidence("ev-doesnotexist", include_page_text=True)
+
+
+def test_offset_analysis_caps_the_lists_but_not_the_counts(store, monkeypatch):
+    monkeypatch.setattr("wellgraph.graph.store.GROUP_ID_LIMIT", 1)
+    out = store.offset_analysis(near_wellbore="99/1-1", radius_km=35)
+    assert out["summary"] and all(len(g["event_ids"]) <= 1 for g in out["summary"])
+    assert sum(g["events"] for g in out["summary"]) > len(out["summary"]) - 1
+    assert "lists_capped" in out
+
+
+def test_unknown_formation_gives_a_note_and_dotted_spelling_matches(store):
+    out = store.query_events(formation="Zorglub Fm.")
+    assert out["total"] == 0 and "Zorglub".upper() in out["note"]
+    assert normalise_formation("Draupne Fm.") == normalise_formation("Draupne Formation")

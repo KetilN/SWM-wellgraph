@@ -218,7 +218,7 @@ def build_server(kg_dir: str | Path | None = None) -> FastMCP:
         Coverage counts all nearby wellbores, those with reports, those with any extracted
         events, and those matching the event filters (formation and hole size). A wellbore
         with a report and no extracted events may have incomplete extraction.
-        Events are grouped by type and hole size, with counts, event IDs for evidence, and
+        Events are grouped by type and hole size, with counts, a sample of event IDs for evidence (lists are capped), and
         recorded lessons. Mud weight ranges use report-derived static mud only. Max ECD is
         separate. Depth ranges include MD and assumed MD, including contextual depths."""
         return guarded(
