@@ -16,6 +16,15 @@ function initClusterCompare() {
     const names = typeof ov !== "undefined" && ov ? ov.wells.map(w => w.name) : state.reportWells.map(w => w.name);
     list.innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
   }
+  // Clicking into a wellbore box empties it so the whole list shows; leaving it empty puts the name back.
+  for (const id of ["cc-a", "cc-b"]) {
+    const input = $(id);
+    const open = () => { if (!input.value) return; input.dataset.previous = input.value; input.placeholder = input.value; input.value = ""; };
+    input.onfocus = open;
+    input.onmousedown = open;
+    input.onblur = () => { if (!input.value.trim()) input.value = input.dataset.previous || ""; };
+    input.onchange = () => { if (input.value.trim() && input.value !== input.dataset.previous) { input.dataset.previous = input.value; input.blur(); loadClusterCompare().catch(ccError); } };
+  }
   $("cc-form").onsubmit = e => { e.preventDefault(); loadClusterCompare().catch(ccError); };
   $("cc-range").onchange = () => loadClusterCompare().catch(ccError);
   $("cc-all").onchange = () => loadClusterCompare().catch(ccError);
@@ -70,33 +79,17 @@ function renderClusterCompare(d) {
 
   ccLocator(d).catch(() => { $("cc-ncs").innerHTML = ""; });
 
-  // ---- cluster maps: kilometres east and north of the reference wellbore
+  // ---- cluster maps: zoomable, on the shelf map
+  ccMaps(d).catch(ccError);
   [A, B].forEach((c, i) => {
-    const W = 360, H = 380, cx = W / 2, cy = H / 2 - 4, S = (W / 2 - 22) / (R * 1.075), colour = CC_COLOURS[i];
-    const kmLon = 111.32 * Math.cos(c.lat * Math.PI / 180), xy = w => [cx + (w.lon - c.lon) * kmLon * S, cy - (w.lat - c.lat) * 110.57 * S];
-    let s = `<rect x="0" y="0" width="${W}" height="${H}" rx="6" fill="var(--sea)"/>
-      <circle cx="${cx}" cy="${cy}" r="${R * S}" fill="${colour}" fill-opacity=".06" stroke="${colour}" stroke-width="1.5"/>
-      <circle cx="${cx}" cy="${cy}" r="${R / 2 * S}" fill="none" stroke="var(--grid)" stroke-dasharray="3 4"/>
-      <text x="${cx + R / 2 * S * .71 + 3}" y="${cy - R / 2 * S * .71 - 2}">${R / 2} km</text><text x="${cx + R * S * .71 + 2}" y="${cy - R * S * .71 - 3}">${R} km</text>
-      <line x1="14" y1="${H - 14}" x2="${14 + R / 4 * S}" y2="${H - 14}" stroke="var(--muted)" stroke-width="2"/><text x="14" y="${H - 20}">${R / 4} km</text>
-      <path d="M${W - 18} ${H - 12}v-22m-4 6l4-7 4 7" fill="none" stroke="var(--muted)" stroke-width="1.4"/><text x="${W - 18}" y="${H - 38}" text-anchor="middle">N</text>`;
-    const order = {OTHER: 0, DEVELOPMENT: 1, EXPLORATION: 2};
-    for (const w of [...c.wells].sort((a, b) => (order[a.type] ?? 0) - (order[b.type] ?? 0) || a.used - b.used)) {
-      const [x, y] = xy(w), tip = `<title>${esc(w.name)} · ${esc((w.type || "other").toLowerCase())} · ${w.distance_km} km${w.used ? " · core data used" : w.has_core ? " · core data, not used" : " · no core data"}${w.field ? " · " + esc(w.field) : ""}</title>`;
-      if (w.name === c.reference) continue;
-      if (w.type === "DEVELOPMENT") s += `<rect x="${x - 3}" y="${y - 3}" width="6" height="6" rx="1" fill="${w.used ? colour : "var(--muted)"}" fill-opacity=".8" stroke="var(--sea)" stroke-width=".8">${tip}</rect>`;
-      else if (w.type !== "EXPLORATION") s += `<path d="M${x - 3} ${y - 3}l6 6M${x + 3} ${y - 3}l-6 6" stroke="var(--muted)" stroke-width="1.4" fill="none">${tip}</path>`;
-      else s += `<circle cx="${x}" cy="${y}" r="4.6" fill="${w.used ? colour : "var(--sea)"}" stroke="${w.used ? "var(--sea)" : "var(--muted)"}" stroke-width="${w.used ? 1 : 1.5}">${tip}</circle>`;
-    }
-    let star = "";
-    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, q = k % 2 ? 3.6 : 8; star += (k ? "L" : "M") + (cx + q * Math.cos(a)).toFixed(1) + " " + (cy + q * Math.sin(a)).toFixed(1); }
-    s += `<path d="${star}Z" fill="var(--ink)" stroke="var(--sea)" stroke-width="1"><title>${esc(c.reference)} · reference wellbore</title></path>
-      <text x="${cx + 10}" y="${cy + 4}" style="fill:var(--ink);font-weight:600;paint-order:stroke;stroke:var(--sea);stroke-width:3px">${esc(c.reference)}</text>`;
-    $("cc-map-" + i).innerHTML = s;
     const t = c.by_type;
-    $("cc-cap-" + i).innerHTML = `<i class="dot" style="background:${colour}"></i> <strong>${esc(c.name)} cluster.</strong> ${number(c.wellbores)} wellbores within ${R} km of ${esc(c.reference)}: ${number(t.EXPLORATION || 0)} exploration, ${number(t.DEVELOPMENT || 0)} development, ${number(t.OTHER || 0)} other. Core data used from ${c.cored_wellbores.length}.`;
+    $("cc-cap-" + i).innerHTML = `<i class="dot" style="background:${CC_COLOURS[i]}"></i> <strong>${esc(c.name)} cluster.</strong> ${number(c.wellbores)} wellbores within ${R} km of ${esc(c.reference)}: ${number(t.EXPLORATION || 0)} exploration, ${number(t.DEVELOPMENT || 0)} development, ${number(t.OTHER || 0)} other. Core data used from ${c.cored_wellbores.length}.`;
   });
-  $("cc-map-legend").innerHTML = `<span>★ reference wellbore</span><span>● exploration wellbore with core data used (cluster colour)</span><span>○ exploration wellbore, no core data</span><span>■ development wellbore</span><span>✕ other wellbore (shallow or soil boring)</span><span>Hover a symbol for its name.</span>`;
+  $("cc-map-legend").innerHTML = `<span><i class="dot" style="background:#111;border:2px solid #fff;outline:1px solid #111"></i>reference wellbore</span>
+    <span><i class="dot" style="background:${CC_COLOURS[0]}"></i><i class="dot" style="background:${CC_COLOURS[1]}"></i>wellbore with core data used</span>
+    <span><i class="dot" style="background:#fff;border:1.5px solid #52606b"></i>exploration wellbore, no core data used</span>
+    <span><i class="dot" style="background:#7d8a94;width:7px;height:7px"></i>development wellbore</span><span><i class="dot" style="background:#b4bec6;width:5px;height:5px"></i>other wellbore</span>
+    <span>Scroll or use + and − to zoom; "Fit cluster" returns to the circle.</span>`;
 
   // ---- formation charts: every formation with enough plugs, each cluster in depth order
   const charted = [A, B].flatMap((c, i) => c.formations.filter(p => p.samples >= d.min_chart_samples && (p.porosity_p50 != null || p.kh_p50_md != null)).map(p => ({...p, c, i})));
@@ -220,4 +213,38 @@ async function ccLocator(d) {
       <text x="${p[0] + (left ? -18 : 18)}" y="${p[1] + 6}" text-anchor="${left ? "end" : "start"}" style="paint-order:stroke;stroke:var(--sea);stroke-width:3px">${number(c.wellbores)} wellbores</text>`;
   });
   $("cc-ncs").innerHTML = s + "</g>";
+}
+
+// The two cluster maps: Leaflet on the shelf layers, fitted to the cluster circle.
+const ccLeaflet = [null, null];
+async function ccMaps(d) {
+  const layers = await (mapData || Promise.all(["land", "quadrants", "blocks", "fields"].map(name => fetch(`/static/geo/${name}.geojson`).then(r => r.json()))));
+  if (ccData !== d) return;
+  d.clusters.forEach((c, i) => {
+    if (!ccLeaflet[i]) {
+      const map = createMap("cc-map-" + i, layers);
+      L.control.scale({imperial: false}).addTo(map);
+      const fit = L.control({position: "topright"});
+      fit.onAdd = () => { const b = L.DomUtil.create("button"); b.type = "button"; b.textContent = "Fit cluster"; b.onclick = e => { e.stopPropagation(); ccLeaflet[i].fit(); }; return b; };
+      fit.addTo(map);
+      ccLeaflet[i] = {map, group: L.layerGroup().addTo(map)};
+    }
+    const {map, group} = ccLeaflet[i], colour = CC_COLOURS[i];
+    group.clearLayers();
+    const ring = L.circle([c.lat, c.lon], {radius: d.range_km * 1000, color: colour, weight: 1.6, fillColor: colour, fillOpacity: .06, interactive: false}).addTo(group);
+    L.circle([c.lat, c.lon], {radius: d.range_km * 500, color: "#7d8a94", weight: 1, dashArray: "3 4", fill: false, interactive: false}).addTo(group);
+    const order = {OTHER: 0, DEVELOPMENT: 1, EXPLORATION: 2};
+    for (const w of [...c.wells].sort((a, b) => (order[a.type] ?? 0) - (order[b.type] ?? 0) || a.used - b.used)) {
+      if (w.name === c.reference) continue;
+      const style = w.used ? {radius: 5, color: "#fff", weight: 1, fillColor: colour, fillOpacity: .95}
+        : w.type === "EXPLORATION" ? {radius: 4.5, color: "#52606b", weight: 1.5, fillColor: "#fff", fillOpacity: .9}
+        : w.type === "DEVELOPMENT" ? {radius: 3, stroke: false, fillColor: "#7d8a94", fillOpacity: .85}
+        : {radius: 2.2, stroke: false, fillColor: "#b4bec6", fillOpacity: .9};
+      L.circleMarker([w.lat, w.lon], style).bindTooltip(`${esc(w.name)} · ${esc((w.type || "other").toLowerCase())} · ${w.distance_km} km${w.used ? " · core data used" : w.has_core ? " · core data, not used" : " · no core data"}${w.field ? " · " + esc(w.field) : ""}`).addTo(group);
+    }
+    L.circleMarker([c.lat, c.lon], {radius: 6.5, color: "#fff", weight: 2, fillColor: "#111", fillOpacity: 1})
+      .bindTooltip(esc(c.reference), {permanent: true, direction: "right", offset: [8, 0], className: "ov-label"}).addTo(group);
+    ccLeaflet[i].fit = () => { map.invalidateSize(); map.fitBounds(ring.getBounds(), {padding: [10, 10], animate: false}); };
+    ccLeaflet[i].fit();
+  });
 }
