@@ -455,11 +455,11 @@ function depthText(e) {
 }
 
 const SECTIONS = {
-  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
+  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true], ["well-clusters", "Well-clusters"]]},
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
     views: [["matrix", "Across the shelf"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
-    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-clusters"]]},
+    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
     views: [["model", "Model graph"], ["graph", "Data graph", true]]}
 };
@@ -1128,15 +1128,10 @@ const graphStyle = () => [
   {selector: "edge", style: {width: 1, "line-color": css("--muted"), opacity: .5, "curve-style": "bezier", "target-arrow-shape": "triangle",
     "target-arrow-color": css("--muted"), "arrow-scale": .6}},
   {selector: "edge[?dashed]", style: {"line-style": "dashed"}},
-  {selector: "node.model-card", style: {shape: "round-rectangle", width: 142, height: 48,
-    "background-color": css("--panel"), "border-color": "data(color)", "border-width": 2,
-    "text-valign": "center", "text-halign": "center", "text-margin-y": 0, "text-outline-width": 0,
-    "font-size": 13, "font-weight": 600, "text-max-width": 126}},
-  {selector: "node.instance-card", style: {shape: "round-rectangle", width: 118, height: 38,
-    "background-color": css("--panel"), "border-color": "data(color)", "border-width": 2,
-    "text-valign": "center", "text-halign": "center", "text-margin-y": 0, "text-outline-width": 0,
-    "font-size": 12, "font-weight": 600, "text-max-width": 104}},
-  {selector: "node.instance-card[?big]", style: {width: 142, height: 48, "background-color": "#dceff2"}},
+  {selector: "node.model-card", style: {shape: "ellipse", width: 34, height: 34,
+    "background-color": "data(color)", "border-color": css("--panel"), "border-width": 2,
+    "font-size": 12, "font-weight": 600, "text-max-width": 150}},
+  {selector: "node.instance-card", style: {shape: "ellipse", "font-size": 11, "text-max-width": 124}},
   {selector: "edge.model-edge", style: {width: 1.25, opacity: .48, "curve-style": "bezier"}},
   {selector: "edge.named", style: {label: "data(relation)", "font-size": 8, color: css("--muted"), "text-rotation": "autorotate",
     "text-background-color": css("--soft"), "text-background-opacity": .9, "text-background-padding": 1}},
@@ -1144,7 +1139,6 @@ const graphStyle = () => [
   {selector: ".off, .out", style: {display: "none"}},
   {selector: ".faded", style: {opacity: .08, "text-opacity": 0}},
   {selector: "edge.lit", style: {opacity: .95, width: 2, "line-color": css("--accent"), "target-arrow-color": css("--accent")}},
-  {selector: "node.model-card.picked", style: {"background-color": "#dceff2"}},
   {selector: "node.picked", style: {"border-width": 3, "border-color": css("--accent")}},
   {selector: "node.found", style: {"border-width": 4, "border-color": "#e0245e"}},
 ];
@@ -1199,7 +1193,7 @@ let ontology, mg;
 function modelDetail(node) {
   const panel = $("modeldetail");
   if (!node) {
-    panel.innerHTML = '<h3>Entity details</h3><p class="small muted">Select a card to review its source and connected entities.</p>';
+    panel.innerHTML = '<h3>Entity details</h3><p class="small muted">Select a node to review its source and connected entities.</p>';
     return;
   }
   const e = ontology.entities.find(entity => entity.name === node.id());
