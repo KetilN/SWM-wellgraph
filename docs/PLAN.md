@@ -208,11 +208,17 @@ Done:
 - [x] `reservoir_quality` reports which permeability measurement is used and lists wells
       without Klinkenberg-corrected horizontal permeability.
 - [x] Pipeline progress file and dashboard (`python -m wellgraph.progress --serve 7861`).
-- [ ] All-wells report run (older estimate follows; the 1,016-report run suggests about
-      110,000-185,000 model calls and 4-6 hours for all 5,326 reports). Measured on 10 reports and scaled to 5,327: about 955,000
-      pages, 190,000 model calls, 477 M input tokens, a page table of about 820 MB.
-      Open: where the JSONs come from (external disk, or Zenodo by byte range), laptop
-      disk space, and model throughput, which has not been measured.
+- [x] All-wells report run, 2026-11-20: 5,326 reports, 4,032 wellbores, 648,520 pages,
+      125,883 pages sent to the model (94,428 new calls, the rest from the reply cache),
+      21 failed pages, 100,405 events after merging (67,022 merged, 652 dropped) over
+      3,646 wellbores. Second depth pass: 26,978 candidates, 13,840 resolved, 1,908
+      failed. 63,086 daily-report rows, 300,619 core samples (1,006 wellbores), 192 fits.
+      Completeness: some depth 87%, hole section 61%, formation 36%, mud weight 49%.
+      Hole section and formation are lower than in the 794-well run because most
+      development wells have no SODIR casing or formation tops to join against.
+      About 5 hours at 32 parallel calls. Graph is 332 MB of Parquet (page table 319 MB);
+      every store query answers in under 0.1 s. Deployed as image v11. Report JSONs were
+      read from a local copy in `data/staging/all` (3.6 GB).
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set
