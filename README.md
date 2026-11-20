@@ -9,15 +9,44 @@ spans wells, such as:
 > Which wells within 20 km had losses in the Shetland Group in the 12 1/4 in section, and
 > at what mud weight?
 
-wellgraph answers that by combining two things:
+wellgraph answers that by building one graph from three sources and serving it through
+one link (`Data -> onboard -> knowledge graph -> MCP server -> agent`):
 
-- **A backbone from public tables** (SODIR FactPages): wellbores, coordinates, operators,
-  formation tops, hole sections and casing.
+- **A backbone from public tables** (SODIR FactPages, no model involved): wellbores,
+  coordinates, operators, formation tops, hole sections and casing for the whole shelf
+  (9,883 wellbores).
 - **Drilling events from the reports**: lost circulation, kicks, stuck pipe, tight hole
-  and instability, each with depth, mud weight and a citation to the report page.
+  and instability, each with depth, mud weight, remedy and the quoted text. A language
+  model reads only the pages that describe drilling problems.
+- **Core data**: porosity and permeability measurements on the same wellbores, with a
+  fitted relationship per formation.
 
-Built at the FORCE hackathon, November 2026. Status: work in progress. See
-[docs/PLAN.md](docs/PLAN.md).
+Two rules keep it trustworthy:
+
+- **Depth joins attach the context.** An event's hole section and formation come from its
+  depth against the SODIR casing and formation tables, not from the model.
+- **Evidence on everything.** Every event links to its report and page, so an agent can
+  quote the source.
+
+## What is in it
+
+| Content | Size |
+|---|---|
+| Reports | 5,326, over 4,032 wellbores (648,520 pages) |
+| Drilling events | 79,413, over 3,513 wellbores |
+| Core samples | 372,863, over 1,237 wellbores |
+
+An example of what an agent finds: in Gullfaks block 34/10, a kick at 1.65 sg at 1,725 m
+in one well and losses at 1.70 sg at 1,704 m in a neighbour, both in the Shetland Group,
+with both report pages cited. More cases are in
+[docs/mcp-live-test.md](docs/mcp-live-test.md).
+
+Limits: formation is known for 40% of events and hole section for 63%, because most
+development wells have no SODIR tops or casing to join against. Event types are sometimes
+wrong: in a check of 23 events against their pages, about 15 were right.
+
+Built at the FORCE hackathon, November 2026, with Python, DuckDB over Parquet, FastMCP and
+claude-haiku-5.5 for extraction. Plan and history: [docs/PLAN.md](docs/PLAN.md).
 
 ## Use it from an agent
 
