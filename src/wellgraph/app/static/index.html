@@ -81,6 +81,8 @@
   .well-context { margin-bottom: 12px; }
   .well-context h3 { font-size: 24px; }
   .well-context .facts { margin: 5px 0 0; }
+  .well-docs { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line, #dde3ea); }
+  .well-docs ul { list-style: none; margin: 2px 0 0; padding: 0; max-height: 7.5em; overflow-y: auto; }
   #well-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .analysis-panel { padding: 0; }
   .tabs { display: flex; gap: 3px; padding: 4px 14px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -348,7 +350,7 @@
 
   <section id="analysis-workspace" hidden aria-labelledby="workspace-title">
     <div class="section-head" id="workspace-heading"><div><h2 id="workspace-title"></h2><p class="muted" id="workspace-description"></p></div></div>
-    <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button><button id="open-well-graph">Well data graph</button></div></div>
+    <div id="well-context" class="panel well-context" hidden><div><h3 id="well-title"></h3><dl class="facts" id="facts"></dl><div id="well-documents" class="well-docs"></div></div><div id="well-actions"><button id="open-well-events">Well event log</button><button id="open-well-offsets">Offset review</button><button id="open-well-core">Compare core</button><button id="open-well-graph">Well data graph</button></div></div>
     <div id="well-picker" class="panel well-picker" hidden>
       <label for="section-field">Field</label>
       <select id="section-field" aria-label="Narrow the wellbore list to one field"></select>
@@ -524,7 +526,7 @@
       </div>
       <div class="gbar toggles small">
         <label><input type="checkbox" id="ring-core" checked disabled><i class="dot" style="background:var(--accent)"></i>in the graph</label>
-        <label><input type="checkbox" id="ring-observed"><i class="dot" style="background:#997334"></i>In reports, awaiting extraction</label>
+        <label><input type="checkbox" id="ring-observed" checked><i class="dot" style="background:#997334"></i>In reports, awaiting extraction</label>
         <label><input type="checkbox" id="ring-planned"><i class="dot" style="background:#7c6aa3"></i>Planned</label>
         <label><input type="checkbox" id="mg-names">Relationship labels</label>
       </div>
@@ -532,7 +534,6 @@
         <aside id="modeldetail" class="graph-details"></aside></div>
       <p class="small muted" id="modelnote"></p>
     </div>
-    <div class="view" id="view-documents"><h3>Loaded source reports</h3><div id="well-documents"></div></div>
     <div class="view" id="view-table"><h3>Extracted event log</h3><p class="small muted" id="event-log-note"></p><div class="chips" id="chips2"></div><div class="table-scroll"><table id="etable"></table></div></div>
     <div class="view" id="view-source"><h3>Report evidence</h3><div id="evidence"><p class="muted small">Select an event to see its report and page.</p></div></div>
     <div class="view" id="view-nearby">
@@ -578,11 +579,11 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/overview-map.js?v=28"></script>
-<script src="/static/core-overview.js?v=28"></script>
-<script src="/static/cluster-compare.js?v=28"></script>
-<script src="/static/pressure.js?v=28"></script>
-<script src="/static/well-clusters.js?v=28"></script>
+<script src="/static/overview-map.js?v=29"></script>
+<script src="/static/core-overview.js?v=29"></script>
+<script src="/static/cluster-compare.js?v=29"></script>
+<script src="/static/pressure.js?v=29"></script>
+<script src="/static/well-clusters.js?v=29"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -615,7 +616,7 @@ function depthText(e) {
 }
 
 const SECTIONS = {
-  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
+  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true]]},
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
     views: [["matrix", "Event overview"], ["nearby", "Offset wells", true], ["pressure", "Pressure window", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
@@ -900,7 +901,6 @@ function renderFacts() {
   const rows = [["Operator", w.operator], ["Type", [w.wellbore_type, w.purpose].filter(Boolean).join(" · ")],
     ["Field", w.field], ["Total depth", w.total_depth_md ? `${fmt(w.total_depth_md)} m MD` : null],
     ["Water depth", w.water_depth ? `${fmt(w.water_depth)} m` : null], ["Core plugs", number(state.core.length)],
-    ["Loaded reports", number(state.detail.documents.length)],
     ["Extracted events", number(Object.values(state.detail.event_counts).reduce((sum, count) => sum + count, 0))]];
   $("facts").innerHTML = rows.filter(([, value]) => value).map(([label, value]) =>
     `<dt>${label}</dt><dd>${esc(value)}</dd>`).join("");
@@ -908,10 +908,11 @@ function renderFacts() {
 
 function renderDocuments() {
   const docs = state.detail.documents;
-  $("well-documents").innerHTML = docs.map(d => `<article class="card"><h4>${esc(d.title || d.document_id)}</h4>
-    <p class="small muted">${[d.report_type?.replaceAll("_", " "), d.delivery_company, d.release_date,
-      d.n_pages ? `${number(d.n_pages)} pages` : ""].filter(Boolean).map(esc).join(" · ")}</p></article>`).join("")
-    || '<p class="muted">No source reports loaded for this wellbore.</p>';
+  $("well-documents").innerHTML = docs.length
+    ? `<div class="muted">Source report${docs.length > 1 ? `s (${number(docs.length)})` : ""}</div><ul>${docs.map(d =>
+      `<li><strong>${esc(d.title || d.document_id)}</strong> <span class="muted">${[d.report_type?.replaceAll("_", " "),
+        d.delivery_company, d.release_date, d.n_pages ? `${number(d.n_pages)} pages` : ""].filter(Boolean).map(esc).join(" · ")}</span></li>`).join("")}</ul>`
+    : '<div class="muted">No source reports loaded for this wellbore.</div>';
 }
 function visibleEvents() {
   const f = state.filter;
@@ -1371,6 +1372,7 @@ const graphStyle = () => [
   {selector: "edge", style: {width: 1, "line-color": css("--muted"), opacity: .5, "curve-style": "bezier", "target-arrow-shape": "triangle",
     "target-arrow-color": css("--muted"), "arrow-scale": .6}},
   {selector: "edge[?dashed]", style: {"line-style": "dashed"}},
+  {selector: "node.model-card[id = 'Wellbore']", style: {width: 52, height: 52, "font-size": 15}},
   {selector: "node.model-card", style: {shape: "ellipse", width: 34, height: 34,
     "background-color": "data(color)", "border-color": css("--panel"), "border-width": 2,
     "font-size": 12, "font-weight": 600, "text-max-width": 150}},
@@ -1477,6 +1479,24 @@ async function loadModel() {
     id: "r" + i, source: r.from, target: r.to, relation: r.name.replaceAll("_", " ").toLowerCase(), dashed: r.ring !== "core"}}));
   const filter = () => {
     const on = {core: true, observed: $("ring-observed").checked, planned: $("ring-planned").checked};
+    // Radial layout: the wellbore in the middle, then one ring per group (in the graph, in
+    // reports, planned). Each node sits near the angle of what it links to on the ring inside.
+    const angle = new Map([["Wellbore", 0]]), radius = {core: 1, observed: 2, planned: 3};
+    const shownRings = ["core", "observed", "planned"].filter(ring => on[ring]);
+    shownRings.forEach((ring, depth) => {
+      const members = mg.cy.nodes().filter(n => n.data("ring") === ring && n.id() !== "Wellbore");
+      const pull = n => { const a = n.neighborhood("node").map(m => angle.get(m.id())).filter(v => v != null && v !== 0 || false);
+        return a.length ? Math.atan2(a.reduce((t, v) => t + Math.sin(v), 0), a.reduce((t, v) => t + Math.cos(v), 0)) : null; };
+      const ordered = members.map(n => ({n, a: pull(n)})).sort((p, q) => (p.a ?? 9) - (q.a ?? 9) || p.n.id().localeCompare(q.n.id()));
+      const r = 185 * (depth + 1), offset = depth * .35;
+      ordered.forEach(({n}, i) => {
+        const a = -Math.PI / 2 + offset + i * 2 * Math.PI / ordered.length;
+        angle.set(n.id(), a);
+        n.data("position", {x: 1.55 * r * Math.cos(a), y: r * Math.sin(a)});
+      });
+      radius[ring] = r;
+    });
+    mg.cy.getElementById("Wellbore").data("position", {x: 0, y: 0});
     mg.cy.batch(() => {
       mg.cy.nodes().forEach(n => n.toggleClass("off", !on[n.data("ring")]));
       mg.cy.edges().toggleClass("named", $("mg-names").checked);
