@@ -42,6 +42,98 @@ REASONS = {
 
 _cache: dict[str, dict[str, Any]] = {}
 
+RANGES_KM = (2, 5, 10, 20, 50)  # choices offered for the range around a selected wellbore
+DEFAULT_RANGE_KM = 10.0
+MAX_NEIGHBOUR_POINTS = 3000  # paired samples sent for the neighbours' cross-plot
+MAX_WELL_POINTS = 2000  # paired samples sent for the selected wellbore
+PAIRED = "isfinite(s.porosity_pct) and isfinite(s.kh_md) and s.kh_md > 0"
+
+
+def neighbourhood(store: GraphStore, name: str, range_km: float = DEFAULT_RANGE_KM) -> dict[str, Any]:
+    """Core porosity and horizontal permeability of one wellbore and of the cored wellbores
+    within `range_km` of it (great-circle distance between SODIR surface positions).
+
+    Every horizontal-permeability measurement counts, whatever its method; the per-wellbore
+    rows say how many are Klinkenberg-corrected.
+    """
+    well = store.resolve_wellbore(name)
+    range_km = min(max(float(range_km), 0.5), 200.0)
+    out: dict[str, Any] = {
+        "wellbore": well["name"], "field": well.get("field"), "lat": well.get("lat"),
+        "lon": well.get("lon"), "range_km": range_km, "ranges_km": list(RANGES_KM),
+        "wells": [], "formations": [], "points": {"well": [], "neighbours": []},
+        "neighbour_points_total": 0,
+    }
+    if well.get("lat") is None or well.get("lon") is None:
+        out["note"] = "This wellbore has no position in SODIR, so its neighbours cannot be found."
+        return out
+    origin = [well["lat"], well["lon"]]
+    members = store._rows("""
+        select w.wellbore_id, w.name, w.field, w.lat, w.lon,
+               haversine_km(?, ?, w.lat, w.lon) as distance_km
+        from wellbore w
+        where w.wellbore_id in (select distinct wellbore_id from core_sample)
+          and isfinite(w.lat) and isfinite(w.lon)
+          and haversine_km(?, ?, w.lat, w.lon) <= ?
+    """, origin + origin + [range_km])
+    ids = sorted({m["wellbore_id"] for m in members} | {well["wellbore_id"]})
+    id_list = ", ".join(str(int(i)) for i in ids)
+    me = int(well["wellbore_id"])
+    stats = {r["wellbore_id"]: r for r in store._rows(f"""
+        select s.wellbore_id, count(*) as samples,
+               count(*) filter (where {PAIRED}) as paired,
+               median(s.porosity_pct) filter (where isfinite(s.porosity_pct)) as porosity_p50,
+               median(s.kh_md) filter (where isfinite(s.kh_md) and s.kh_md > 0) as kh_p50_md,
+               count(*) filter (where s.kh_method = 'klinkenberg' and s.kh_md > 0) as kh_klinkenberg,
+               min(s.depth_md) as shallowest_md, max(s.depth_md) as deepest_md
+        from core_sample s where s.wellbore_id in ({id_list}) group by 1
+    """)}
+    for m in members:
+        row = stats.get(m["wellbore_id"], {})
+        out["wells"].append({
+            "name": m["name"], "field": m["field"], "lat": m["lat"], "lon": m["lon"],
+            "distance_km": m["distance_km"], "selected": m["wellbore_id"] == me,
+            **{k: row.get(k) for k in ("samples", "paired", "porosity_p50", "kh_p50_md",
+                                       "kh_klinkenberg", "shallowest_md", "deepest_md")},
+        })
+    out["wells"].sort(key=lambda w: (not w["selected"], w["distance_km"]))
+    out["formations"] = store._rows(f"""
+        select coalesce(nullif(trim(s.formation), ''), 'No formation') as formation,
+               count(*) filter (where s.wellbore_id = {me} and {PAIRED}) as well_samples,
+               median(s.porosity_pct) filter (where s.wellbore_id = {me} and {PAIRED}) as well_porosity_p50,
+               median(s.kh_md) filter (where s.wellbore_id = {me} and {PAIRED}) as well_kh_p50_md,
+               count(distinct s.wellbore_id) filter (where s.wellbore_id <> {me} and {PAIRED}) as neighbour_wellbores,
+               count(*) filter (where s.wellbore_id <> {me} and {PAIRED}) as neighbour_samples,
+               median(s.porosity_pct) filter (where s.wellbore_id <> {me} and {PAIRED}) as neighbour_porosity_p50,
+               median(s.kh_md) filter (where s.wellbore_id <> {me} and {PAIRED}) as neighbour_kh_p50_md
+        from core_sample s where s.wellbore_id in ({id_list})
+        group by 1 having count(*) filter (where {PAIRED}) > 0
+        order by well_samples desc, neighbour_samples desc
+    """)
+    point = ("select s.porosity_pct as phi, s.kh_md as kh, "
+             "coalesce(nullif(trim(s.formation), ''), 'No formation') as formation, "
+             "w.name as wellbore, s.depth_md from core_sample s join wellbore w using (wellbore_id) ")
+    names = [w["name"] for w in out["wells"]]
+    if well["name"] not in names:
+        names.append(well["name"])
+    formations = [f["formation"] for f in out["formations"]]
+    out["point_wellbores"], out["point_columns"] = names, ["porosity_pct", "kh_md", "formation", "wellbore", "depth_md"]
+
+    def compact(rows: list[dict[str, Any]]) -> list[list[Any]]:
+        # formation and wellbore as indexes into out["formations"] and out["point_wellbores"]
+        return [[r["phi"], r["kh"], formations.index(r["formation"]), names.index(r["wellbore"]),
+                 r["depth_md"]] for r in rows]
+
+    out["points"]["well"] = compact(store._rows(
+        f"{point} where s.wellbore_id = {me} and {PAIRED} order by hash(s.sample_id) limit {MAX_WELL_POINTS}"))
+    out["points"]["neighbours"] = compact(store._rows(
+        f"{point} where s.wellbore_id in ({id_list}) and s.wellbore_id <> {me} and {PAIRED} "
+        f"order by hash(s.sample_id) limit {MAX_NEIGHBOUR_POINTS}"))
+    out["neighbour_points_total"] = sum(
+        w["paired"] or 0 for w in out["wells"] if not w["selected"])
+    out["well_points_total"] = (stats.get(me) or {}).get("paired", 0)
+    return out
+
 
 def complete_linkage(n: int, edges: list[tuple[int, int, float]], limit: float) -> list[list[int]]:
     """Groups of 0..n-1 in which every pair is closer than `limit`.

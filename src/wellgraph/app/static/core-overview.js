@@ -10,21 +10,38 @@ function crossCategory(value, key) {
   return key === "kh_method" ? methodLabel(value) : value;
 }
 
+const crossFilterValues = () => Object.fromEntries(Object.keys(CROSS_FILTERS).map(key => [key, $("cross-" + key).value]));
+
+// Each filter lists only the values that occur together with the other filters that are set:
+// with a field chosen, the formation list holds the formations cored in that field.
+async function loadCrossOptions() {
+  let chosen = crossFilterValues();
+  for (let pass = 0; pass < 3; pass++) {
+    const options = await api("/api/core/filters", chosen);
+    let dropped = false;
+    for (const [key, title] of Object.entries(CROSS_FILTERS)) {
+      const select = $("cross-" + key), keep = options[key].includes(chosen[key]);
+      select.innerHTML = `<option value="">${title}</option>` + options[key].map(value =>
+        `<option value="${esc(value)}">${esc(crossCategory(value, key))}</option>`).join("");
+      select.value = keep ? chosen[key] : "";
+      if (chosen[key] && !keep) dropped = true;
+    }
+    if (!dropped) return;
+    chosen = crossFilterValues();  // a value no longer fits: list the choices again without it
+  }
+}
+
 async function initCoreOverview() {
   if (!crossFiltersReady) {
-    crossFiltersReady = api("/api/core/filters").then(options => {
-      for (const [key, title] of Object.entries(CROSS_FILTERS)) {
-        const select = $("cross-" + key);
-        select.innerHTML = `<option value="">${title}</option>` + options[key].map(value =>
-          `<option value="${esc(value)}">${esc(crossCategory(value, key))}</option>`).join("");
-        select.onchange = () => loadCoreOverview().catch(showError);
-      }
+    const changed = () => loadCrossOptions().then(loadCoreOverview).catch(showError);
+    crossFiltersReady = loadCrossOptions().then(() => {
+      for (const key of Object.keys(CROSS_FILTERS)) $("cross-" + key).onchange = changed;
       $("cross-colour").onchange = () => loadCoreOverview().catch(showError);
       $("cross-context").onchange = renderCoreOverview;
       $("cross-trends").onchange = renderCoreOverview;
       $("cross-reset").onclick = () => {
         for (const key of Object.keys(CROSS_FILTERS)) $("cross-" + key).value = "";
-        loadCoreOverview().catch(showError);
+        changed();
       };
     }).catch(err => { crossFiltersReady = null; throw err; });
   }

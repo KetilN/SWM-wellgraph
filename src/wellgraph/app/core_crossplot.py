@@ -28,14 +28,36 @@ PAIRED = """
 """
 
 
-def options(store: GraphStore) -> dict[str, list[str]]:
-    columns = [
-        f"list(distinct coalesce({column}, '{UNASSIGNED}') "
-        f"order by coalesce({column}, '{UNASSIGNED}')) as {key}"
-        for key, column in FILTER_COLUMNS.items()
-    ]
-    row = store._rows(f"select {', '.join(columns)} {PAIRED}")[0]
-    return {key: values or [] for key, values in row.items()}
+def _condition(key: str, value: str | None, parameters: list[str]) -> str | None:
+    column = FILTER_COLUMNS[key]
+    if value == UNASSIGNED:
+        return f"{column} is null"
+    if value:
+        parameters.append(value)
+        return f"{column} = ?"
+    return None
+
+
+def options(store: GraphStore, filters: dict[str, str | None] | None = None) -> dict[str, list[str]]:
+    """Choices for each filter, narrowed by the other filters that are set.
+
+    With a field chosen, the formation list holds only formations cored in that field (and
+    the same for rock type, grain size and method). A filter never narrows its own list, and
+    the field list is never narrowed: the field is the starting point, so the user can
+    always switch to another one and the other lists follow.
+    """
+    filters = filters or {}
+    out: dict[str, list[str]] = {}
+    for key, column in FILTER_COLUMNS.items():
+        parameters: list[str] = []
+        where = [] if key == "field" else [
+            c for other in FILTER_COLUMNS if other != key
+            if (c := _condition(other, filters.get(other), parameters))]
+        rows = store._rows(
+            f"select distinct coalesce({column}, '{UNASSIGNED}') as value {PAIRED} "
+            f"{''.join(' and ' + c for c in where)} order by 1", parameters)
+        out[key] = [r["value"] for r in rows]
+    return out
 
 
 def crossplot(

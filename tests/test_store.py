@@ -398,3 +398,31 @@ def test_unknown_formation_gives_a_note_and_dotted_spelling_matches(store):
     out = store.query_events(formation="Zorglub Fm.")
     assert out["total"] == 0 and "Zorglub".upper() in out["note"]
     assert normalise_formation("Draupne Fm.") == normalise_formation("Draupne Formation")
+
+
+def test_core_filter_options_narrow_with_the_other_filters(core_store):
+    from wellgraph.app import core_crossplot
+
+    everything = core_crossplot.options(core_store)
+    assert everything["field"] == ["(unassigned)", "ALFA"]
+    assert everything["kh_method"] == ["air", "klinkenberg"]
+    # 99/1-3 has no field and its plugs alternate between methods; ALFA holds wells 1 and 2
+    narrowed = core_crossplot.options(core_store, {"kh_method": "klinkenberg", "field": "ALFA"})
+    assert narrowed["field"] == ["(unassigned)", "ALFA"]  # the field list is never narrowed
+    assert narrowed["kh_method"] == ["air", "klinkenberg"]  # a filter never narrows its own list
+    assert core_crossplot.options(core_store, {"lithology": "chalk"})["formation"] == []
+
+
+def test_core_neighbourhood_lists_cored_wellbores_in_range(core_store):
+    from wellgraph.app.well_clusters import neighbourhood
+
+    near = neighbourhood(core_store, "99/1-1", 0.5)
+    assert [w["name"] for w in near["wells"]] == ["99/1-1"] and near["wells"][0]["selected"]
+    wide = neighbourhood(core_store, "99/1-1", 200)
+    assert wide["wells"][0]["name"] == "99/1-1" and wide["wells"][0]["distance_km"] == 0
+    assert len(wide["wells"]) == 3 and wide["well_points_total"] == 12
+    assert wide["neighbour_points_total"] == 24 == len(wide["points"]["neighbours"])
+    (tor,) = wide["formations"]
+    assert (tor["formation"], tor["well_samples"], tor["neighbour_wellbores"], tor["neighbour_samples"]) == ("TOR FM", 12, 2, 24)
+    for phi, kh, formation, wellbore, depth in wide["points"]["well"]:
+        assert kh > 0 and formation == 0 and wide["point_wellbores"][wellbore] == "99/1-1" and depth >= 2450

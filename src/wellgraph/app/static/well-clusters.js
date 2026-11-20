@@ -1,135 +1,101 @@
-// Well-clusters map: cored wellbores grouped so that no two are 20 km or more apart, coloured by
-// the between-wellbore correlation of formation-mean log10 Klinkenberg horizontal permeability.
-const CLUSTER_STOPS = [[-1, [33, 102, 172]], [0, [247, 247, 247]], [1, [178, 24, 43]]];
-const CLUSTER_NONE = "#6b7780";
-const CLUSTER_DETAIL_ZOOM = 7.5;  // below this, clusters are fixed-size dots; above, true-size circles
-let clusterData, clusterLoaded, clusterMap, clusterShapes = new Map(), clusterDots = new Map(), clusterSelected;
+// Well-cluster view: core porosity and horizontal permeability of the selected wellbore against the
+// cored wellbores within a chosen range of it.
+const CLUSTER_ME = "#ad3948", CLUSTER_NEIGHBOUR = "#6b7780";
+const CLUSTER_KH_CLASSES = [[1, "#dfe9ee"], [10, "#a9c6d4"], [100, "#6c9fb5"], [1000, "#2f7591"], [Infinity, "#0b4660"]];
+let clusterData, clusterKey, clusterMap, clusterLayer;
 
-function clusterColour(r) {
-  const v = Math.max(-1, Math.min(1, r));
-  const [lo, hi] = v < 0 ? [CLUSTER_STOPS[0], CLUSTER_STOPS[1]] : [CLUSTER_STOPS[1], CLUSTER_STOPS[2]];
-  const t = (v - lo[0]) / (hi[0] - lo[0]);
-  return `rgb(${lo[1].map((c, i) => Math.round(c + (hi[1][i] - c) * t)).join(",")})`;
-}
-const clusterName = c => c.fields.length ? c.fields.slice(0, 2).join(", ") + (c.fields.length > 2 ? " +" + (c.fields.length - 2) : "")
-  : c.wells[0].name + (c.wellbores > 1 ? " area" : "");
-const clusterValue = c => c.r == null ? "no value" : (c.r >= 0 ? "+" : "−") + Math.abs(c.r).toFixed(2);
+const clusterKhColour = kh => kh == null ? "#ffffff" : CLUSTER_KH_CLASSES.find(([limit]) => kh < limit)[1];
 
 async function initWellClusters() {
-  if (!clusterData) clusterData = api("/api/core/clusters").catch(err => { clusterData = null; throw err; });
-  const data = clusterLoaded = await clusterData;
-  const layers = await (mapData || Promise.all(["land", "quadrants", "blocks", "fields"].map(name =>
-    fetch(`/static/geo/${name}.geojson`).then(r => r.json()))));
-  if (state.view !== "well-clusters") return;
-  if (!clusterMap) drawWellClusters(data, layers);
+  const well = state.well, range = +$("cluster-range").value;
+  $("cluster-range").onchange = () => initWellClusters().catch(showError);
+  $("cluster-formation").onchange = drawClusterPlot;
+  const key = well + "|" + range;
+  if (clusterKey === key) { if (clusterMap) clusterMap.invalidateSize(); return; }
+  $("cluster-summary").textContent = "Loading core data around " + well + "…";
+  const [data, layers] = await Promise.all([api("/api/core/neighbours", {name: well, range_km: range}),
+    mapData || Promise.all(["land", "quadrants", "blocks", "fields"].map(name => fetch(`/static/geo/${name}.geojson`).then(r => r.json())))]);
+  if (state.view !== "well-clusters" || state.well !== well || +$("cluster-range").value !== range) return;
+  clusterKey = key;
+  clusterData = data;
+  const others = data.wells.filter(w => !w.selected), me = data.wells.find(w => w.selected);
+  $("cluster-title").textContent = `Well-cluster: ${data.wellbore} and cored wellbores within ${fmt(data.range_km)} km`;
+  $("cluster-summary").textContent = data.note || (
+    (me ? `${data.wellbore} has ${number(data.well_points_total)} core plugs with both porosity and horizontal permeability. `
+        : `${data.wellbore} has no core data in the graph. `) +
+    (others.length ? `${number(others.length)} other cored wellbore${others.length > 1 ? "s" : ""} within ${fmt(data.range_km)} km, with ${number(data.neighbour_points_total)} such plugs.`
+        : `No other cored wellbore within ${fmt(data.range_km)} km: try a wider range.`));
+  const previous = $("cluster-formation").value;
+  $("cluster-formation").innerHTML = '<option value="">All formations</option>' + data.formations.map((f, i) =>
+    `<option value="${i}">${esc(f.formation)} (${number(f.well_samples)} + ${number(f.neighbour_samples)})</option>`).join("");
+  const keep = data.formations.findIndex(f => f.formation === previous);
+  $("cluster-formation").value = keep < 0 ? "" : String(keep);
+  $("cluster-formation").dataset.name = "";
+  drawClusterPlot();
+  drawClusterTables(data);
+  drawClusterMap(data, layers);
+  $("cluster-definition").textContent = `Range is the great-circle distance between SODIR surface positions, so a deviated wellbore can reach further at reservoir depth. ` +
+    `A plug counts when it has both porosity and a horizontal permeability above zero, whatever the measurement method. ` +
+    `Formation comes from the plug depth against SODIR formation tops; plugs from wellbores without tops are listed as "No formation".`;
+}
+
+function drawClusterPlot() {
+  const data = clusterData, chosen = $("cluster-formation").value;
+  const pick = rows => chosen === "" ? rows : rows.filter(p => p[2] === +chosen);
+  const mine = pick(data.points.well), near = pick(data.points.neighbours), all = [...near, ...mine];
+  if (!all.length) { $("cluster-plot").innerHTML = '<p class="small muted">No plugs with both porosity and permeability in this selection.</p>'; $("cluster-legend").innerHTML = ""; return; }
+  const W = 640, H = 420, L0 = 62, T = 14, PW = W - L0 - 14, PH = H - T - 44;
+  const logs = all.map(p => Math.log10(p[1]));
+  const y0 = Math.floor(Math.min(...logs)), y1 = Math.max(y0 + 1, Math.ceil(Math.max(...logs)));
+  const x1 = Math.max(10, Math.ceil(Math.max(...all.map(p => p[0])) / 5) * 5);
+  const x = v => L0 + v / x1 * PW, y = v => T + PH - (v - y0) / (y1 - y0) * PH;
+  let svg = `<rect x="${L0}" y="${T}" width="${PW}" height="${PH}" fill="var(--panel)" stroke="var(--line)"/>`;
+  for (let v = 0; v <= x1; v += 5) svg += `<line x1="${x(v)}" y1="${T}" x2="${x(v)}" y2="${T + PH}" stroke="var(--grid)" stroke-width=".5"/><text x="${x(v)}" y="${T + PH + 15}" text-anchor="middle" font-size="11">${v}</text>`;
+  for (let v = y0; v <= y1; v++) svg += `<line x1="${L0}" y1="${y(v)}" x2="${L0 + PW}" y2="${y(v)}" stroke="var(--grid)" stroke-width=".5"/><text x="${L0 - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11">${khLabel(10 ** v)}</text>`;
+  const dot = (p, colour, r, opacity) => `<circle cx="${x(p[0]).toFixed(1)}" cy="${y(Math.log10(p[1])).toFixed(1)}" r="${r}" fill="${colour}" fill-opacity="${opacity}"><title>${esc(data.point_wellbores[p[3]])} · ${esc(data.formations[p[2]].formation)} · ${fmt(p[4], 1)} m MD · ${fmt(p[0], 1)}% · ${khLabel(p[1])} mD</title></circle>`;
+  svg += near.map(p => dot(p, CLUSTER_NEIGHBOUR, 2, .32)).join("") + mine.map(p => dot(p, CLUSTER_ME, 2.8, .8)).join("");
+  svg += `<text x="${L0 + PW / 2}" y="${H - 6}" text-anchor="middle" font-size="12">Porosity, %</text>
+    <text transform="translate(14 ${T + PH / 2}) rotate(-90)" text-anchor="middle" font-size="12">Horizontal permeability, mD</text>`;
+  $("cluster-plot").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Porosity against horizontal permeability for the selected wellbore and its neighbours">${svg}</svg>`;
+  const median = values => { const s = [...values].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
+  const line = (rows, total) => rows.length ? `${number(rows.length)}${chosen === "" && total > rows.length ? " of " + number(total) : ""} plugs · median ${fmt(median(rows.map(p => p[0])), 1)}% · ${khLabel(median(rows.map(p => p[1])))} mD` : "no plugs";
+  $("cluster-legend").innerHTML = `<span><i class="dot" style="background:${CLUSTER_ME}"></i>${esc(data.wellbore)}: ${line(mine, data.well_points_total)}</span>
+    <span><i class="dot" style="background:${CLUSTER_NEIGHBOUR}"></i>Neighbours within ${fmt(data.range_km)} km: ${line(near, data.neighbour_points_total)}</span>`;
+}
+
+function drawClusterTables(data) {
+  const value = (v, digits) => v == null ? "–" : digits == null ? khLabel(v) : fmt(v, digits);
+  $("cluster-formations").innerHTML = `<tr><th>Formation</th><th class="num">${esc(data.wellbore)} plugs</th><th class="num">Median porosity, %</th><th class="num">Median kh, mD</th>
+    <th class="num">Neighbour wellbores</th><th class="num">Neighbour plugs</th><th class="num">Median porosity, %</th><th class="num">Median kh, mD</th></tr>` +
+    data.formations.map(f => `<tr><td>${esc(f.formation)}</td><td class="num">${number(f.well_samples)}</td><td class="num">${value(f.well_porosity_p50, 1)}</td><td class="num">${value(f.well_kh_p50_md)}</td>
+      <td class="num">${number(f.neighbour_wellbores)}</td><td class="num">${number(f.neighbour_samples)}</td><td class="num">${value(f.neighbour_porosity_p50, 1)}</td><td class="num">${value(f.neighbour_kh_p50_md)}</td></tr>`).join("");
+  $("cluster-wells").innerHTML = `<tr><th>Wellbore</th><th>Field</th><th class="num">Distance, km</th><th class="num">Plugs</th><th class="num">Median porosity, %</th><th class="num">Median kh, mD</th><th class="num">Core interval, m MD</th></tr>` +
+    data.wells.map(w => `<tr class="${w.selected ? "me" : ""}" ${w.selected ? "" : `data-open="${esc(w.name)}" title="Open ${esc(w.name)}"`}><td>${esc(w.name)}${w.selected ? " (selected)" : ""}</td><td>${esc(w.field || "")}</td>
+      <td class="num">${fmt(w.distance_km, 1)}</td><td class="num">${number(w.paired || 0)}</td><td class="num">${value(w.porosity_p50, 1)}</td><td class="num">${value(w.kh_p50_md)}</td>
+      <td class="num">${fmt(w.shallowest_md)}–${fmt(w.deepest_md)}</td></tr>`).join("");
+  for (const row of $("cluster-wells").querySelectorAll("[data-open]"))
+    row.onclick = () => openWell(row.dataset.open, "reservoir", "well-clusters").catch(showError);
+}
+
+function drawClusterMap(data, layers) {
+  if (!clusterMap) {
+    clusterMap = createMap("cluster-map", layers);
+    clusterMap.attributionControl.addAttribution("Core: © GeoProvider RealPore (CC BY 4.0)");
+    clusterLayer = L.layerGroup().addTo(clusterMap);
+  }
+  clusterLayer.clearLayers();
   clusterMap.invalidateSize();
-  if (!clusterSelected) {
-    clusterMap.fitBounds(L.latLngBounds(data.clusters.map(c => [c.lat, c.lon])), {padding: [24, 24], animate: false});
-    showClusterList(data);
-  }
-}
-
-function drawWellClusters(data, layers) {
-  const s = data.summary, d = data.definition;
-  clusterMap = createMap("cluster-map", layers);
-  clusterMap.attributionControl.addAttribution("Core: © GeoProvider RealPore (CC BY 4.0)");
-  // Clusters without a value first, so the coloured ones stay on top and clickable.
-  const ordered = [...data.clusters].sort((a, b) => (a.r != null) - (b.r != null) || b.radius_km - a.radius_km);
-  const detail = L.layerGroup(), far = L.layerGroup();
-  for (const c of ordered) {
-    const valued = c.r != null, colour = valued ? clusterColour(c.r) : CLUSTER_NONE;
-    const tip = `${esc(clusterName(c))} · ${number(c.wellbores)} wellbore${c.wellbores > 1 ? "s" : ""} · ${valued ? "r = " + clusterValue(c) : "no value: " + esc(c.reason_text)}`;
-    const style = {color: valued ? "#22313c" : CLUSTER_NONE, weight: valued ? 1.3 : 1, dashArray: valued ? null : "3 4",
-      fillColor: colour, fillOpacity: valued ? .8 : 0};
-    const shape = L.circle([c.lat, c.lon], {...style, radius: Math.max(c.radius_km, 1.5) * 1000 + 600})
-      .bindTooltip(tip, {sticky: true}).on("click", () => selectCluster(c)).addTo(detail);
-    const dot = L.circleMarker([c.lat, c.lon], {...style, fillOpacity: valued ? .92 : 0,
-      radius: valued ? 5 + Math.min(5, Math.sqrt(c.wellbores)) : 3.5})
-      .bindTooltip(tip, {sticky: true}).on("click", () => selectCluster(c, true)).addTo(far);
-    clusterShapes.set(c.id, shape);
-    clusterDots.set(c.id, dot);
-    for (const w of c.wells) {
-      L.circleMarker([w.lat, w.lon], {radius: 2.2, stroke: false, fillColor: valued ? "#22313c" : CLUSTER_NONE,
-        fillOpacity: .7, interactive: false}).bindTooltip(esc(w.name)).addTo(detail);
-    }
-  }
-  const showLevel = () => {
-    const close = clusterMap.getZoom() >= CLUSTER_DETAIL_ZOOM;
-    (close ? detail : far).addTo(clusterMap);
-    (close ? far : detail).remove();
-  };
-  clusterMap.on("zoomend", showLevel);
-  showLevel();
-  $("cluster-summary").textContent =
-    `${number(s.wellbores)} of ${number(s.cored_wellbores)} cored wellbores have Klinkenberg-corrected horizontal permeability. ` +
-    `They form ${number(s.clusters)} well-clusters (largest ${number(s.largest_cluster)} wellbores, widest ${fmt(s.largest_span_km, 1)} km); ` +
-    `${number(s.with_value)} clusters, holding ${number(s.wellbores_in_valued_clusters)} wellbores, have a correlation.`;
-  $("cluster-legend").innerHTML =
-    `<span>−1 <i class="cluster-ramp" style="background:linear-gradient(90deg,${clusterColour(-1)},${clusterColour(0)},${clusterColour(1)})"></i> +1 &nbsp;between-well correlation r</span>` +
-    `<span><i class="cluster-none"></i>no value (${number(s.clusters - s.with_value)} clusters: ` +
-    Object.entries(s.no_value).map(([reason, count]) => `${number(count)} ${esc(reason.toLowerCase())}`).join("; ") + ")</span>";
-  $("cluster-definition").innerHTML =
-    `<strong>Well-cluster:</strong> wellbores with Klinkenberg-corrected horizontal permeability, grouped so that no two wellbores in a cluster are ${d.max_distance_km} km or more apart ` +
-    `(closest wellbores merge first; great-circle distance between SODIR surface positions). Zoomed out, each cluster is one dot at its centre; zoomed in, the circle covers the cluster's wellbores (small dots). ` +
-    `<strong>Correlation:</strong> for every pair of wellbores in a cluster and every formation both have cored (${d.min_samples}+ plugs each), the two wellbore means of log10 permeability form a pair; ` +
-    `r is the Pearson correlation over all pairs in the cluster, each entered both ways round. r near +1: where one wellbore has a tight or permeable formation, so do its neighbours. ` +
-    `r near 0 or below: knowing one wellbore tells little about the next. SODIR's placeholder units (${d.excluded_formations.map(f => f.toLowerCase()).join(", ")}) do not count as a shared formation. A value needs ${d.min_pairs}+ pairs over ${d.min_formations}+ formations; other clusters are drawn dashed with no colour. ` +
-    `With few shared formations r is uncertain: check the pair count in the panel.`;
-}
-
-function showClusterList(data) {
-  const valued = data.clusters.filter(c => c.r != null).sort((a, b) => b.r - a.r);
-  $("cluster-detail").innerHTML = `<h4>Clusters with a correlation</h4>
-    <p class="small muted">Select a row or a circle on the map.</p>
-    <table><tr><th>Cluster</th><th class="num">Wells</th><th class="num">Pairs</th><th class="num">r</th></tr>` +
-    valued.map(c => `<tr class="row" data-cluster="${c.id}" style="cursor:pointer"><td><span class="dot" style="background:${clusterColour(c.r)};border:1px solid #22313c"></span> ${esc(clusterName(c))}</td>
-      <td class="num">${c.wellbores}</td><td class="num">${c.pairs}</td><td class="num">${clusterValue(c)}</td></tr>`).join("") + "</table>";
-  for (const row of $("cluster-detail").querySelectorAll("[data-cluster]"))
-    row.onclick = () => selectCluster(data.clusters.find(c => c.id === +row.dataset.cluster), true);
-}
-
-function clusterScatter(c) {
-  const logs = c.points.flatMap(p => [p.log_a, p.log_b]);
-  const lo = Math.floor(Math.min(...logs)), hi = Math.max(lo + 1, Math.ceil(Math.max(...logs)));
-  const S = 230, L0 = 44, T = 8, P = S - L0 - 8, pos = v => (v - lo) / (hi - lo) * P;
-  const formations = c.formations, hue = f => `hsl(${Math.round(formations.indexOf(f) * 360 / formations.length)},55%,40%)`;
-  let svg = `<rect x="${L0}" y="${T}" width="${P}" height="${P}" fill="var(--panel)" stroke="var(--line)"/>
-    <line x1="${L0}" y1="${T + P}" x2="${L0 + P}" y2="${T}" stroke="var(--line)" stroke-dasharray="3 3"/>`;
-  const tick = Math.ceil((hi - lo) / 4);
-  for (let v = lo; v <= hi; v += tick) svg += `<text x="${L0 + pos(v)}" y="${T + P + 13}" text-anchor="middle" font-size="10">${khLabel(10 ** v)}</text>
-    <text x="${L0 - 5}" y="${T + P - pos(v) + 3}" text-anchor="end" font-size="10">${khLabel(10 ** v)}</text>`;
-  for (const p of c.points) for (const [x, y, a, b] of [[p.log_a, p.log_b, p.a, p.b], [p.log_b, p.log_a, p.b, p.a]])
-    svg += `<circle cx="${L0 + pos(x)}" cy="${T + P - pos(y)}" r="2.6" fill="${hue(p.formation)}" fill-opacity=".7"><title>${esc(p.formation)} · ${esc(a)}: ${khLabel(10 ** x)} mD · ${esc(b)}: ${khLabel(10 ** y)} mD</title></circle>`;
-  return `<svg viewBox="0 0 ${S} ${S + 14}" role="img" aria-label="Formation-mean permeability of one wellbore against another, for every pair">${svg}
-    <text x="${L0 + P / 2}" y="${S + 11}" text-anchor="middle" font-size="10">Formation mean in one wellbore, mD</text></svg>
-    <p class="legend small muted">${formations.map(f => `<span><i class="dot" style="background:${hue(f)}"></i>${esc(f)}</span>`).join("")}</p>`;
-}
-
-function clusterHighlight(on) {
-  for (const shape of [clusterShapes.get(clusterSelected), clusterDots.get(clusterSelected)]) {
-    if (!shape) continue;
-    shape.setStyle({weight: on ? 3.2 : shape.options.dashArray ? 1 : 1.3});
-    if (on && clusterMap.hasLayer(shape)) shape.bringToFront();
-  }
-}
-
-function selectCluster(c, zoom) {
-  clusterHighlight(false);
-  clusterSelected = c.id;
-  if (zoom) clusterMap.fitBounds(L.latLng(c.lat, c.lon).toBounds(2 * Math.max(c.radius_km, 1.5) * 1000).pad(2), {animate: false});
-  clusterHighlight(true);
-  $("cluster-detail").innerHTML = `<button id="cluster-back">All clusters</button>
-    <h4 style="margin-top:10px">${esc(clusterName(c))}</h4>
-    <div class="cluster-value">${c.r == null ? "No value" : "r = " + clusterValue(c)}</div>
-    <p class="small muted">${c.r == null ? esc(c.reason_text) + "."
-      : `From ${number(c.pairs)} wellbore pairs over ${c.formations.length} shared formations.`}
-      ${number(c.wellbores)} wellbore${c.wellbores > 1 ? "s" : ""}, ${number(c.samples)} Klinkenberg plugs, ${fmt(c.span_km, 1)} km across.</p>
-    ${c.r == null ? "" : clusterScatter(c)}
-    <table><tr><th>Wellbore</th><th class="num">Plugs</th><th class="num" title="Formations with 5 or more plugs">Fms</th><th class="num">Median kh, mD</th></tr>` +
-    c.wells.map(w => `<tr><td>${esc(w.name)}</td><td class="num">${number(w.samples)}</td><td class="num">${w.formations}</td><td class="num">${khLabel(w.kh_median_md)}</td></tr>`).join("") + "</table>";
-  $("cluster-back").onclick = () => {
-    clusterHighlight(false);
-    clusterSelected = null;
-    showClusterList(clusterLoaded);
-  };
+  if (data.lat == null) return;
+  const ring = L.circle([data.lat, data.lon], {radius: data.range_km * 1000, color: CLUSTER_ME, weight: 1.4, dashArray: "5 5", fill: false, interactive: false}).addTo(clusterLayer);
+  for (const w of data.wells.filter(w => !w.selected))
+    L.circleMarker([w.lat, w.lon], {radius: 5.5, color: "#22313c", weight: 1, fillColor: clusterKhColour(w.kh_p50_md), fillOpacity: .95})
+      .bindTooltip(`${esc(w.name)} · ${fmt(w.distance_km, 1)} km · median ${w.porosity_p50 == null ? "–" : fmt(w.porosity_p50, 1) + "%"} · ${khLabel(w.kh_p50_md)} mD`)
+      .on("click", () => openWell(w.name, "reservoir", "well-clusters").catch(showError)).addTo(clusterLayer);
+  const me = data.wells.find(w => w.selected);
+  L.circleMarker([data.lat, data.lon], {radius: 7.5, color: CLUSTER_ME, weight: 3, fillColor: clusterKhColour(me ? me.kh_p50_md : null), fillOpacity: 1})
+    .bindTooltip(`${esc(data.wellbore)} (selected)`).addTo(clusterLayer);
+  clusterMap.fitBounds(ring.getBounds().pad(.08), {animate: false});
+  $("cluster-map-legend").innerHTML = "<span>Median kh, mD:</span>" + CLUSTER_KH_CLASSES.map(([limit, colour], i) =>
+    `<span><i class="dot" style="background:${colour};border:1px solid #22313c"></i>${i === 0 ? "under 1" : limit === Infinity ? "1,000 or more" : `${number(CLUSTER_KH_CLASSES[i - 1][0])}–${number(limit)}`}</span>`).join("") +
+    `<span><i class="dot" style="background:#fff;border:2px solid ${CLUSTER_ME}"></i>selected wellbore</span><span>Dashed ring: ${fmt(data.range_km)} km. Select a wellbore to open it.</span>`;
 }

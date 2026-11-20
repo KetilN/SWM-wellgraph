@@ -180,10 +180,19 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         return core_crossplot.crossplot(store, filters, _text(request, "colour_by"))
 
     def core_filters(request: Request):
-        return core_crossplot.options(store)
+        return core_crossplot.options(
+            store, {key: _text(request, key) for key in core_crossplot.FILTER_COLUMNS})
 
     def core_clusters(request: Request):
         return well_clusters.clusters(store)
+
+    def core_neighbours(request: Request):
+        name = _text(request, "name")
+        if not name:
+            raise ValueError("Give a wellbore name: /api/core/neighbours?name=25/7-2&range_km=10")
+        range_km = _text(request, "range_km")
+        return well_clusters.neighbourhood(
+            store, name, float(range_km) if range_km else well_clusters.DEFAULT_RANGE_KM)
 
     def evidence(request: Request):
         event_id = _text(request, "id")
@@ -198,6 +207,6 @@ def register(mcp: FastMCP, store: GraphStore) -> None:
         "/api/daily": daily, "/api/matrix": matrix, "/api/core": core,
         "/api/reservoir": reservoir, "/api/poroperm": poroperm,
         "/api/core/overview": core_overview, "/api/core/filters": core_filters,
-        "/api/core/clusters": core_clusters,
+        "/api/core/clusters": core_clusters, "/api/core/neighbours": core_neighbours,
     }.items():
         mcp.custom_route(path, methods=["GET"], include_in_schema=False)(guarded(handler))

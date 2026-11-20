@@ -179,3 +179,10 @@ def test_well_clusters_endpoint(client):
     for c in d["clusters"]:
         assert (c["r"] is None) == (c["reason"] is not None)
         assert c["span_km"] < 20.0
+
+
+def test_core_neighbours_endpoint_checks_its_input(client):
+    assert client.get("/api/core/neighbours", params={"name": "nope"}).status_code == 404
+    assert client.get("/api/core/neighbours").status_code == 400
+    d = client.get("/api/core/neighbours", params={"name": "99/1-1", "range_km": 10}).json()
+    assert d["wellbore"] == "99/1-1" and d["wells"] == [] and d["points"]["well"] == []

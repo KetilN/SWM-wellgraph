@@ -186,14 +186,12 @@
   a { color: var(--accent); }
   #map, #offset-map { height: clamp(360px, 61vh, 670px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
   #offset-map { height: 310px; margin-bottom: 12px; }
-  #cluster-map { height: clamp(380px, 62vh, 680px); border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
-  .cluster-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 330px); gap: 14px; margin-top: 10px; }
-  .cluster-side { padding: 12px; background: var(--soft); border-radius: 8px; align-self: start; max-height: clamp(380px, 62vh, 680px); overflow: auto; }
-  .cluster-side h4 { margin: 0 0 6px; }
-  .cluster-side table { width: 100%; font-size: 12px; }
-  .cluster-value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .cluster-ramp { display: inline-block; width: 150px; height: 10px; border-radius: 5px; border: 1px solid var(--line); }
-  .cluster-none { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1.5px dashed #6b7780; }
+  #cluster-map { height: 420px; border-radius: 8px; background: var(--sea); border: 1px solid var(--line); }
+  .cluster-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin: 10px 0 4px; }
+  .cluster-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  #view-well-clusters h4 { margin: 16px 0 6px; }
+  #view-well-clusters tr.me td { font-weight: 650; }
+  #view-well-clusters tr[data-open] { cursor: pointer; }
   @media (max-width: 860px) { .cluster-layout { grid-template-columns: minmax(0, 1fr); } }
   .leaflet-container { font: inherit; }
   .qlabel { color: var(--grid); font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; pointer-events: none; }
@@ -322,14 +320,24 @@
     </div>
     <div class="view" id="view-well-clusters">
       <div class="panel-head">
-        <div><h3>Well-clusters: do neighbouring wells agree on horizontal permeability?</h3>
-          <p class="small muted" id="cluster-summary" role="status">Loading well-clusters…</p></div>
+        <div><h3 id="cluster-title">Well-cluster: porosity and permeability around a wellbore</h3>
+          <p class="small muted" id="cluster-summary" role="status">Loading…</p></div>
+        <div class="cluster-controls">
+          <label>Range <select id="cluster-range" aria-label="Range around the wellbore">
+            <option value="2">2 km</option><option value="5">5 km</option><option value="10" selected>10 km</option>
+            <option value="20">20 km</option><option value="50">50 km</option></select></label>
+          <label>Formation <select id="cluster-formation" aria-label="Formation shown in the cross-plot"></select></label>
+        </div>
       </div>
-      <p class="legend small muted" id="cluster-legend"></p>
       <div class="cluster-layout">
-        <div id="cluster-map" role="region" aria-label="Map of well-clusters coloured by between-well permeability correlation"></div>
-        <aside class="cluster-side" id="cluster-detail" aria-label="Selected well-cluster"></aside>
+        <div><div id="cluster-plot"></div><p class="legend small muted" id="cluster-legend"></p></div>
+        <div><div id="cluster-map" role="region" aria-label="Map of the selected wellbore and cored wellbores in range"></div>
+          <p class="legend small muted" id="cluster-map-legend"></p></div>
       </div>
+      <h4>Selected wellbore against its neighbours, by formation</h4>
+      <div class="table-scroll"><table id="cluster-formations"></table></div>
+      <h4>Cored wellbores in range</h4>
+      <div class="table-scroll"><table id="cluster-wells"></table></div>
       <p class="small muted" id="cluster-definition"></p>
       <p class="small muted">Source: © GeoProvider, RealPore core data, CC BY 4.0. <a href="https://zenodo.org/records/4723018">Dataset record</a>. Wellbore positions and formation tops: SODIR.</p>
     </div>
@@ -421,8 +429,8 @@
 
 <script src="/static/vendor/leaflet.js"></script>
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/core-overview.js"></script>
-<script src="/static/well-clusters.js"></script>
+<script src="/static/core-overview.js?v=16"></script>
+<script src="/static/well-clusters.js?v=16"></script>
 <script>
 const TYPES = {lost_circulation:"#087b8d", kick:"#ad3948", stuck_pipe:"#415da1", tight_hole:"#567894",
   wellbore_instability:"#806a9b", pack_off:"#386b70", washout:"#548da5", fishing:"#465879", sidetrack:"#647783", other:"#748999"};
@@ -455,11 +463,11 @@ function depthText(e) {
 }
 
 const SECTIONS = {
-  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true], ["well-clusters", "Well-clusters"]]},
+  wellbore: {title: "Wellbore workspace", views: [["strip", "Depth profile", true], ["timedepth", "Time–depth", true], ["documents", "Source reports", true]]},
   drilling: {title: "Drilling", description: "Review historical incidents across the shelf, around an offset location or in a single wellbore.",
     views: [["matrix", "Across the shelf"], ["nearby", "Offset wells", true], ["table", "Well event log", true], ["source", "Report evidence"]]},
   reservoir: {title: "Reservoir", description: "Compare paired core measurements across the shelf and within individual formations.",
-    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"]]},
+    views: [["core-overview", "All core data"], ["poroperm", "Formation detail"], ["well-clusters", "Well-cluster", true]]},
   knowledge: {title: "Knowledge graph", description: "Explore connected data and see which relationships are available in this snapshot.",
     views: [["model", "Model graph"], ["graph", "Data graph", true]]}
 };
