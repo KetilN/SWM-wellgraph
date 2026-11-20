@@ -229,6 +229,11 @@ Done:
       dropped); duplicates merged again after the depth pass (4,707). 100,405 -> 79,413
       events over 3,513 wellbores. Depths beyond total depth: 6,252 -> 647. Completeness:
       some depth 86%, hole section 63%, formation 40%, mud weight 51%. Deployed as v13.
+- [x] Core data for every cored wellbore, not only those with a report: 372,863 samples,
+      1,237 wellbores, 219 fits over 85 formations. In image v13.
+- [x] Deploying on a slow network: build a patch image on top of the previous one with
+      only the code and the changed small tables (23 MB instead of 340 MB), see
+      docs/deploy-azure.md.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set

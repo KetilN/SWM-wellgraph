@@ -60,3 +60,23 @@ az containerapp create -n wellgraph -g SWM-wellgraph --environment swm-wellgraph
   --registry-username <from az acr credential show> --registry-password <same> \
   --target-port 7860 --ingress external --min-replicas 1 --max-replicas 1 --cpu 0.5 --memory 1.0Gi
 ```
+
+## Patch image (slow network)
+
+The page table makes the build context about 340 MB. When only code or the small tables
+changed, build on top of the image already in the registry:
+
+```bash
+S=$(mktemp -d) && mkdir $S/kg
+git archive HEAD src schema.yaml ontology.yaml | tar -x -C $S
+cp data/kg/event.parquet data/kg/core_sample.parquet data/kg/poro_perm_fit.parquet $S/kg/
+cat > $S/Dockerfile <<'EOF'
+FROM swmwellgraph.azurecr.io/wellgraph-mcp:v12
+COPY --chown=app:app schema.yaml ontology.yaml /app/
+COPY --chown=app:app src /app/src
+COPY --chown=app:app kg/ /app/kg/
+EOF
+az acr build -r swmwellgraph -g SWM-wellgraph -t wellgraph-mcp:v13 --platform linux/amd64 $S
+```
+
+v12 is the last full image (all pages); v13 is a patch on it.
