@@ -79,4 +79,6 @@ EOF
 az acr build -r swmwellgraph -g SWM-wellgraph -t wellgraph-mcp:v13 --platform linux/amd64 $S
 ```
 
-v12 is the last full image (all pages); v13 is a patch on it.
+v12 is the last full image (all pages). v13 added the cleaned events and core tables; v14 to
+v24 are code-only patches, each built `FROM` the one before (no `kg/` copy needed). After
+about 20 layers, build a full image again from a fast network.

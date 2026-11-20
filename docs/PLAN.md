@@ -234,6 +234,29 @@ Done:
 - [x] Deploying on a slow network: build a patch image on top of the previous one with
       only the code and the changed small tables (23 MB instead of 340 MB), see
       docs/deploy-azure.md.
+- [x] Web app reworked on 2026-11-20 (images v14 to v24, all patch images):
+      - Overview map of every positioned wellbore (9,819, from `/api/map_wells`) with
+        screens (operator, field, type, data available, event type), four colour modes,
+        counts for wells and wellbores, block shading, legend and inspector.
+      - Active production licences (536, 22 companies) with operator and licensees, from
+        SODIR FactMaps layer 3000 and `licence_licensee_hst`
+        (`wellgraph.onboard.licences` writes `app/static/geo/licences.geojson`); the map
+        colours them by a chosen company's role.
+      - Drilling event overview filtered by field, wellbore, stratigraphic unit and hole
+        size (`store.event_matrix`), and the same filters on the event list.
+      - Reservoir: core filters narrowed by the other filters (field first); Well-cluster
+        view of one wellbore against cored wellbores in a range (`/api/core/neighbours`);
+        Cluster comparison of two clusters (`/api/core/compare`), which pools per-wellbore
+        percentiles the way the chat analysis of Snøhvit against Åsgard did.
+      - Each section (Wellbore, Drilling, Reservoir, Knowledge graph) keeps its own
+        wellbore; Drilling, Reservoir and Knowledge graph have a picker with a field screen.
+      - Knowledge graph entities are drawn as round nodes.
+- [x] Data check of the loaded graph, 2026-11-20: no missing wellbores or broken links.
+      Open findings: 1,108 of 5,326 reports are copies of another report (28% of pages);
+      about 7,150 core samples in 27 source files sit on a different wellbore than the
+      file names (the id comes from RealPore); 29,361 repeated core-sample groups; 4,055
+      daily-report rows in feet stored as metres; quotes found word for word on the page
+      for 80% of events.
 
 Next, in order:
 1. **Disk:** user connects the external disk; check its layout read-only; set

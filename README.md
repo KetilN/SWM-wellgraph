@@ -143,16 +143,27 @@ Then connect to `http://localhost:7860/mcp`.
 
 ## Look at it in a browser
 
-The same server has a small page for people: an offset map, a depth strip for one
-wellbore (formations, hole sections, mud weight, events) and the report text behind each
-event.
+The same server has a web app for people. It reads the same graph as the MCP tools,
+through JSON endpoints under `/api/`. Hosted at
+<https://wellgraph.happystone-2f8f8670.norwayeast.azurecontainerapps.io/>, or locally:
 
 ```bash
 PYTHONPATH=src uv run python -m wellgraph.mcp_server --http --port 7860
 ```
 
-Open `http://localhost:7860/`. The page reads the same graph as the MCP tools, through
-JSON endpoints under `/api/`.
+Open `http://localhost:7860/`. It has five sections:
+
+| Section | What it shows |
+|---|---|
+| Overview | A map of every wellbore with a position (9,819). Screens for operator, field, wellbore type, data available and event type; colour by data, events, type or decade; counts that follow the screens. Layers for fields, block shading and the 536 active production licences, coloured by a chosen company's role (operator or partner). An inspector shows what is under the pointer. |
+| Wellbore | Find a wellbore with reports, then its depth profile (formations, hole sections, mud weight, events, core), time-depth curve from daily reports, and source reports. |
+| Drilling | Event overview: counts by stratigraphic unit and event type, filtered by field, wellbore, unit and hole size, down to the list of events. Offset wells within a radius. The event log of one wellbore. The report text behind an event. |
+| Reservoir | Porosity-permeability cross-plot of all core data, with filters that follow the chosen field. One formation in detail. Well-cluster: one wellbore against the cored wellbores within a chosen range. Cluster comparison: two clusters side by side, by formation and depth. |
+| Knowledge graph | The model (entity types and relationships) and the data graph of one wellbore. |
+
+Drilling, Reservoir and Knowledge graph each keep their own selected wellbore, picked in
+place from a list that can be narrowed by field. Choosing a wellbore in one section does
+not change the others.
 
 ## Tools
 
@@ -205,7 +216,7 @@ src/wellgraph/
   resolve/      wellbore names to NPD ids, depth to hole section and formation
   graph/        graph build and read-only store
   mcp_server/   the MCP tools
-  app/          small web page and JSON API on the same server
+  app/          web app and JSON API on the same server
 samples/        four report JSONs to try the pipeline on
 ontology.yaml   what exists: entity and relationship types, OSDU kinds
 schema.yaml     how it is stored: tables, columns, types, units
@@ -219,6 +230,9 @@ docs/           plan and design notes
   DOI [10.5281/zenodo.24320092](https://doi.org/10.5281/zenodo.24320092), CC BY 4.0.
   Attribution: ConocoPhillips / Diskos.
 - Backbone: SODIR FactPages, Norwegian Licence for Open Government Data (NLOD) 2.0.
+- Map layers (quadrants, blocks, fields, production licences and their licensees): SODIR
+  FactMaps and FactPages, NLOD 2.0. Rebuild the licence layer with
+  `python -m wellgraph.onboard.licences`. Coastline: Natural Earth.
 - Core data (porosity, permeability, rock type): RealPore, Zenodo record 4723018,
   DOI [10.5281/zenodo.4723018](https://doi.org/10.5281/zenodo.4723018).
   Data are © GeoProvider https://geoprovider.no/ and licensed CC-BY 4.0.
